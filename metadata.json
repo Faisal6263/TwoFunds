@@ -1,0 +1,6 @@
+{
+  "name": "TwoFunds AI",
+  "description": "A smart local-first couple budgeting system that parses SMS expenses using Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
