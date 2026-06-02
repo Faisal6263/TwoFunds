@@ -45,7 +45,6 @@ fun SpendRadarScreen(
     customDailyLimit: Double,
     onCustomLimitChange: (Double) -> Unit,
     currentSpender: SpenderProfile,
-    onCurrentSpenderChange: (SpenderProfile) -> Unit,
     onDeleteExpense: (Int) -> Unit
 ) {
     val scrollState = rememberScrollState()
@@ -125,7 +124,7 @@ fun SpendRadarScreen(
                     color = Color(0xFFFFFBEB),
                     border = BorderStroke(1.dp, WarningAmber.copy(alpha = 0.35f))
                 ) {
-                    Text("${currentSpender.emoji} Assigning to ${currentSpender.displayName}", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                    Text("${currentSpender.emoji} Default: ${currentSpender.displayName}", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = TextPrimary)
                 }
             }
             Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -141,19 +140,6 @@ fun SpendRadarScreen(
                         label = { Text("${profile.emoji} ${profile.displayName}") },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = PrimaryColor,
-                            selectedLabelColor = Color.White
-                        )
-                    )
-                }
-            }
-            Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SpenderProfile.entries.forEach { profile ->
-                    FilterChip(
-                        selected = currentSpender == profile,
-                        onClick = { onCurrentSpenderChange(profile) },
-                        label = { Text("Spend as ${profile.displayName}") },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = SuccessGreen,
                             selectedLabelColor = Color.White
                         )
                     )
