@@ -17,5 +17,12 @@ data class Expense(
     val merchant: String,
     val category: String,
     val dateInMillis: Long,
-    val originalSms: String
+    val originalSms: String,
+    val spentBy: String = SpenderProfile.HUSBAND.displayName
 )
+
+enum class SpenderProfile(val displayName: String, val emoji: String) {
+    HUSBAND("Husband", "👨"),
+    WIFE("Wife", "👩"),
+    SHARED("Shared", "🤝")
+}
