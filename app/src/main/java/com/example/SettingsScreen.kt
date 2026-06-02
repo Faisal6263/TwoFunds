@@ -53,17 +53,29 @@ import com.example.ui.theme.TextSecondary
 fun SettingsScreen(
     mode: SpendMode,
     customDailyLimit: Double,
+    dailyPacingLimit: Double,
+    monthlyBudget: Double,
     weeklyBudget: Double,
+    weekendAllowance: Double,
+    currentSpender: SpenderProfile,
     totalTransactions: Int,
     syncMessage: String?,
     onModeSelect: (SpendMode) -> Unit,
     onCustomLimitChange: (Double) -> Unit,
+    onDailyPacingChange: (Double) -> Unit,
+    onMonthlyBudgetChange: (Double) -> Unit,
     onWeeklyBudgetChange: (Double) -> Unit,
+    onWeekendAllowanceChange: (Double) -> Unit,
+    onCurrentSpenderChange: (SpenderProfile) -> Unit,
     onOpenSmsSync: () -> Unit,
-    onOpenMonthlyLedger: () -> Unit
+    onOpenMonthlyLedger: () -> Unit,
+    onOpenMonthlyBudget: () -> Unit
 ) {
     var customLimitInput by remember(customDailyLimit) { mutableStateOf(customDailyLimit.toInt().toString()) }
+    var dailyPacingInput by remember(dailyPacingLimit) { mutableStateOf(dailyPacingLimit.toInt().toString()) }
+    var monthlyBudgetInput by remember(monthlyBudget) { mutableStateOf(monthlyBudget.toInt().toString()) }
     var weeklyBudgetInput by remember(weeklyBudget) { mutableStateOf(weeklyBudget.toInt().toString()) }
+    var weekendAllowanceInput by remember(weekendAllowance) { mutableStateOf(weekendAllowance.toInt().toString()) }
 
     Column(
         modifier = Modifier
@@ -96,7 +108,22 @@ fun SettingsScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Outlined.Settings, contentDescription = null, tint = PrimaryColor)
                     Spacer(modifier = Modifier.width(10.dp))
-                    Text("Budget profile", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Budget profile ⚙️", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
+
+                Text("Default spender for new expenses", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    SpenderProfile.entries.forEach { profile ->
+                        FilterChip(
+                            selected = currentSpender == profile,
+                            onClick = { onCurrentSpenderChange(profile) },
+                            label = { Text("${profile.emoji} ${profile.displayName}") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = PrimaryColor,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        )
+                    }
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -124,6 +151,26 @@ fun SettingsScreen(
                 )
 
                 OutlinedTextField(
+                    value = dailyPacingInput,
+                    onValueChange = { dailyPacingInput = it.filter(Char::isDigit) },
+                    label = { Text("Weekday daily pacing") },
+                    prefix = { Text("Rs.") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = monthlyBudgetInput,
+                    onValueChange = { monthlyBudgetInput = it.filter(Char::isDigit) },
+                    label = { Text("Monthly budget") },
+                    prefix = { Text("Rs.") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
                     value = weeklyBudgetInput,
                     onValueChange = { weeklyBudgetInput = it.filter(Char::isDigit) },
                     label = { Text("Weekly budget") },
@@ -133,10 +180,23 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                OutlinedTextField(
+                    value = weekendAllowanceInput,
+                    onValueChange = { weekendAllowanceInput = it.filter(Char::isDigit) },
+                    label = { Text("Weekend ride allowance") },
+                    prefix = { Text("Rs.") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 Button(
                     onClick = {
                         customLimitInput.toDoubleOrNull()?.takeIf { it > 0 }?.let(onCustomLimitChange)
+                        dailyPacingInput.toDoubleOrNull()?.takeIf { it > 0 }?.let(onDailyPacingChange)
+                        monthlyBudgetInput.toDoubleOrNull()?.takeIf { it > 0 }?.let(onMonthlyBudgetChange)
                         weeklyBudgetInput.toDoubleOrNull()?.takeIf { it > 0 }?.let(onWeeklyBudgetChange)
+                        weekendAllowanceInput.toDoubleOrNull()?.takeIf { it > 0 }?.let(onWeekendAllowanceChange)
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
                     modifier = Modifier.fillMaxWidth()
@@ -158,6 +218,13 @@ fun SettingsScreen(
             subtitle = "$totalTransactions transactions stored locally.",
             icon = Icons.Outlined.ReceiptLong,
             onClick = onOpenMonthlyLedger
+        )
+
+        SettingsShortcut(
+            title = "Monthly budget split",
+            subtitle = "Divide food, rides, bills, and other category budgets.",
+            icon = Icons.Outlined.AccountBalanceWallet,
+            onClick = onOpenMonthlyBudget
         )
 
         Surface(
