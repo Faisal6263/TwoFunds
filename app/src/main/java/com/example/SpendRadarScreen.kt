@@ -44,20 +44,24 @@ fun SpendRadarScreen(
     onModeSelect: (SpendMode) -> Unit,
     customDailyLimit: Double,
     onCustomLimitChange: (Double) -> Unit,
+    currentSpender: SpenderProfile,
+    onCurrentSpenderChange: (SpenderProfile) -> Unit,
     onDeleteExpense: (Int) -> Unit
 ) {
     val scrollState = rememberScrollState()
     var showCustomLimitDialog by remember { mutableStateOf(false) }
-    var activeProfile by remember { mutableStateOf("Faisal") }
+    var viewProfile by remember { mutableStateOf<SpenderProfile?>(null) }
     
-    val radarData = remember(expenses, mode, customDailyLimit) {
+    val radarData = remember(expenses, mode, customDailyLimit, viewProfile) {
         val actualDailyLimit = when(mode) {
             SpendMode.FRUGAL -> 400.0
             SpendMode.STANDARD -> 800.0
             SpendMode.SPLURGE -> 1500.0
             SpendMode.CUSTOM -> customDailyLimit
         }
-        val todayExpenses = expenses.filter { isToday(it.dateInMillis) }
+        val todayExpenses = expenses.filter {
+            isToday(it.dateInMillis) && (viewProfile == null || it.spentBy == viewProfile?.displayName)
+        }
         val todayTotal = todayExpenses.sumOf { it.amount }
         val remaining = (actualDailyLimit - todayTotal).coerceAtLeast(0.0)
         val progress = if (actualDailyLimit > 0) (todayTotal / actualDailyLimit).toFloat().coerceIn(0f, 1f) else 0f
@@ -106,25 +110,54 @@ fun SpendRadarScreen(
             .padding(16.dp)
     ) {
         // App Header section
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(PrimaryColor))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("View: $activeProfile", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TextPrimary)
-            }
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, CardBorder),
-                modifier = Modifier.clickable {
-                    activeProfile = if (activeProfile == "Faisal") "Partner" else "Faisal"
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(PrimaryColor))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Viewing: ${viewProfile?.displayName ?: "All profiles"}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TextPrimary)
                 }
-            ) {
-                Text("Switch Partner", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFFFFBEB),
+                    border = BorderStroke(1.dp, WarningAmber.copy(alpha = 0.35f))
+                ) {
+                    Text("${currentSpender.emoji} Assigning to ${currentSpender.displayName}", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                }
+            }
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = viewProfile == null,
+                    onClick = { viewProfile = null },
+                    label = { Text("All") }
+                )
+                SpenderProfile.entries.forEach { profile ->
+                    FilterChip(
+                        selected = viewProfile == profile,
+                        onClick = { viewProfile = profile },
+                        label = { Text("${profile.emoji} ${profile.displayName}") },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = PrimaryColor,
+                            selectedLabelColor = Color.White
+                        )
+                    )
+                }
+            }
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SpenderProfile.entries.forEach { profile ->
+                    FilterChip(
+                        selected = currentSpender == profile,
+                        onClick = { onCurrentSpenderChange(profile) },
+                        label = { Text("Spend as ${profile.displayName}") },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = SuccessGreen,
+                            selectedLabelColor = Color.White
+                        )
+                    )
+                }
             }
         }
 
