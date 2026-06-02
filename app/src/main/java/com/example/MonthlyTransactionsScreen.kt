@@ -65,6 +65,9 @@ fun MonthlyTransactionsScreen(expenses: List<Expense>, navController: NavControl
     }
     
     val totalSpent = monthlyExpenses.sumOf { it.amount }
+    val husbandTotal = monthlyExpenses.filter { it.spentBy == SpenderProfile.HUSBAND.displayName }.sumOf { it.amount }
+    val wifeTotal = monthlyExpenses.filter { it.spentBy == SpenderProfile.WIFE.displayName }.sumOf { it.amount }
+    val sharedTotal = monthlyExpenses.filter { it.spentBy == SpenderProfile.SHARED.displayName }.sumOf { it.amount }
     val currentMonthName = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(Date())
 
     Scaffold(
@@ -139,6 +142,21 @@ fun MonthlyTransactionsScreen(expenses: List<Expense>, navController: NavControl
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.8f)
                         )
+                    }
+                }
+            }
+
+            item {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4)),
+                    border = BorderStroke(1.dp, SuccessGreen.copy(alpha = 0.35f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        MonthlyProfileTotal("👨 Husband", husbandTotal, Modifier.weight(1f))
+                        MonthlyProfileTotal("👩 Wife", wifeTotal, Modifier.weight(1f))
+                        MonthlyProfileTotal("🤝 Shared", sharedTotal, Modifier.weight(1f))
                     }
                 }
             }
@@ -253,6 +271,15 @@ fun MonthlyTransactionsScreen(expenses: List<Expense>, navController: NavControl
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun MonthlyProfileTotal(label: String, amount: Double, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = TextSecondary)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text("₹${String.format("%,.0f", amount)}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black, color = TextPrimary)
     }
 }
 
