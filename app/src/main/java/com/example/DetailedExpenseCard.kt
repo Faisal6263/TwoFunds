@@ -50,9 +50,12 @@ fun DetailedExpenseCard(expense: Expense, onDelete: (() -> Unit)? = null) {
                     }
                 }
                 Spacer(modifier = Modifier.height(4.dp))
-                val byList = listOf("HUSBAND", "WIFE", "SHARED")
-                val by = byList[kotlin.math.abs(expense.amount.toInt()) % 3]
-                Text("SPENT BY: $by PROFILE", style = MaterialTheme.typography.labelSmall, color = TextSecondary, letterSpacing = 1.sp)
+                val spenderEmoji = when (expense.spentBy) {
+                    SpenderProfile.WIFE.displayName -> SpenderProfile.WIFE.emoji
+                    SpenderProfile.SHARED.displayName -> SpenderProfile.SHARED.emoji
+                    else -> SpenderProfile.HUSBAND.emoji
+                }
+                Text("$spenderEmoji SPENT BY: ${expense.spentBy.uppercase()} PROFILE", style = MaterialTheme.typography.labelSmall, color = TextSecondary, letterSpacing = 1.sp)
             }
             Text("-₹${String.format("%.0f", expense.amount)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ErrorRed)
             if (onDelete != null) {
