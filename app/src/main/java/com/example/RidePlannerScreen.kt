@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -28,6 +29,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
@@ -43,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.ui.theme.CardBorder
 import com.example.ui.theme.ErrorRed
@@ -60,10 +64,12 @@ private data class RideIdea(
 )
 
 @Composable
-fun RidePlannerScreen() {
+fun RidePlannerScreen(rideBudget: Double) {
     val ideas = remember {
         listOf(
             RideIdea("Nandi Hills Sunrise", 60f, 700f, 300f),
+            RideIdea("Local Coffee Hop", 5f, 250f, 100f),
+            RideIdea("City Errand Loop", 10f, 300f, 120f),
             RideIdea("Lonavala Cafe", 85f, 1200f, 450f),
             RideIdea("Mulshi Lake", 120f, 1400f, 600f),
             RideIdea("Highway Cafe", 45f, 500f, 250f)
@@ -76,7 +82,7 @@ fun RidePlannerScreen() {
     var mealBudget by remember { mutableFloatStateOf(selectedIdea.mealBudget) }
     var buffer by remember { mutableFloatStateOf(selectedIdea.buffer) }
 
-    val weekendFund = 2600f
+    val weekendFund = rideBudget.toFloat().coerceAtLeast(1f)
     val roundTripKm = oneWayDistance * 2
     val fuelCost = (roundTripKm / mileage.coerceAtLeast(1f)) * fuelPrice
     val totalCost = fuelCost + mealBudget + buffer
@@ -147,7 +153,7 @@ fun RidePlannerScreen() {
             }
         }
 
-        Text("Trip ideas", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = PrimaryColor)
+        Text("Trip ideas 🛵", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = PrimaryColor)
         ideas.chunked(2).forEach { rowIdeas ->
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 rowIdeas.forEach { idea ->
@@ -242,7 +248,8 @@ private fun CostCalculatorCard(
                 Text("Live cost calculator", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TextPrimary)
             }
 
-            PlannerSlider("One-way distance", "${oneWayDistance.toInt()} km", oneWayDistance, 5f..250f, onDistanceChange)
+            DistanceInput(oneWayDistance, onDistanceChange)
+            PlannerSlider("One-way distance", "${oneWayDistance.toInt()} km", oneWayDistance, 1f..250f, onDistanceChange)
             PlannerSlider("Vehicle mileage", "${mileage.toInt()} km/l", mileage, 15f..70f, onMileageChange)
             PlannerSlider("Fuel price", "Rs.${fuelPrice.toInt()}/l", fuelPrice, 80f..130f, onFuelPriceChange)
             PlannerSlider("Food and stops", "Rs.${mealBudget.toInt()}", mealBudget, 0f..3000f, onMealBudgetChange)
@@ -286,6 +293,33 @@ private fun PlannerSlider(
             )
         )
     }
+}
+
+@Composable
+private fun DistanceInput(
+    oneWayDistance: Float,
+    onDistanceChange: (Float) -> Unit
+) {
+    var distanceInput by remember(oneWayDistance) { mutableStateOf(oneWayDistance.toInt().toString()) }
+
+    OutlinedTextField(
+        value = distanceInput,
+        onValueChange = { value ->
+            val cleaned = value.filter(Char::isDigit).take(3)
+            distanceInput = cleaned
+            cleaned.toFloatOrNull()?.let { onDistanceChange(it.coerceIn(1f, 250f)) }
+        },
+        label = { Text("Exact one-way distance") },
+        suffix = { Text("km") },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        shape = RoundedCornerShape(12.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = PrimaryColor,
+            unfocusedBorderColor = CardBorder
+        ),
+        modifier = Modifier.fillMaxWidth()
+    )
 }
 
 @Composable
