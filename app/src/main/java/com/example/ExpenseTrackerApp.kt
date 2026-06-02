@@ -154,7 +154,6 @@ fun ExpenseTrackerApp(viewModel: MainViewModel = viewModel()) {
                     customDailyLimit = customLimit,
                     onCustomLimitChange = { viewModel.setCustomDailyLimit(it) },
                     currentSpender = currentSpender,
-                    onCurrentSpenderChange = { viewModel.setCurrentSpender(it) },
                     onDeleteExpense = { viewModel.deleteExpense(it) }
                 )
             }
