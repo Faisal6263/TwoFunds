@@ -15,7 +15,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.Explore
-import androidx.compose.material.icons.outlined.SmartToy
+import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material.icons.outlined.TwoWheeler
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -493,13 +493,13 @@ fun HomeScreen(
         }
         Spacer(modifier = Modifier.height(12.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ActionButton("SMS Ingest", Icons.Outlined.SmartToy, SuccessGreen, Modifier.weight(1f)) { navController.navigate("sync") }
+            ActionButton("SMS Ingest", Icons.Outlined.Sms, SuccessGreen, Modifier.weight(1f)) { navController.navigate("sync") }
             Spacer(modifier = Modifier.weight(1f))
         }
         
         Spacer(modifier = Modifier.height(24.dp))
         
-        // Gemini Spending Insight
+        // Local spending insight
         Row(modifier = Modifier.height(IntrinsicSize.Min)) {
             Box(modifier = Modifier.fillMaxHeight().width(4.dp).background(PrimaryColor, RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp)))
             Card(
@@ -511,7 +511,7 @@ fun HomeScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = WarningAmber, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("GEMINI SPENDING INSIGHT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = PrimaryColor, letterSpacing = 2.sp)
+                        Text("LOCAL SPENDING INSIGHT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = PrimaryColor, letterSpacing = 2.sp)
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     Text("\"Budget is in pristine shape! Daily limits remain safe for weekend rides.\"", style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurface)

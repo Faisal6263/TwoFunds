@@ -103,7 +103,7 @@ fun ExpenseTrackerApp(viewModel: MainViewModel = viewModel()) {
                     onClick = { navController.navigate("radar") { launchSingleTop = true } }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Outlined.SmartToy, "SMS Sync") },
+                    icon = { Icon(Icons.Outlined.Sms, "SMS Sync") },
                     label = { Text("SMS Sync") },
                     selected = currentRoute == "sync",
                     onClick = { navController.navigate("sync") { launchSingleTop = true } }

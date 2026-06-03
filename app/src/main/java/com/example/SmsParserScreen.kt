@@ -105,7 +105,7 @@ fun SmsParserScreen(viewModel: MainViewModel) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text("SMS AUTO-TRACKING", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, letterSpacing = 2.sp)
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text("When a bank SMS arrives, TwoFunds intercepts and auto-refreshes your balances in real-time.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("When a bank SMS arrives, TwoFunds parses matching transaction text locally and refreshes your balances.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }

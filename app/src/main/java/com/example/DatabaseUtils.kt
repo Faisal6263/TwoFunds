@@ -111,7 +111,123 @@ fun parseMerchantFromText(sender: String, body: String): String {
     } else "Retail Bank"
 }
 
-fun parseExpenseFromSmsFallback(sender: String, body: String, dateInMillis: Long): Expense? {
+fun looksLikeFinancialSms(sender: String, body: String): Boolean {
+    val text = body.lowercase()
+    val senderText = sender.lowercase()
+    val hasMoneyToken = Regex("(?i)(?:rs\\.?|inr|\\u20B9)\\s*[0-9]").containsMatchIn(body)
+    val senderLooksFinancial = listOf("bank", "bk", "hdfc", "sbi", "icici", "axis", "kotak", "upi", "paytm", "gpay", "phonepe")
+        .any { senderText.contains(it) }
+    val textLooksFinancial = listOf("debited", "paid", "spent", "txn", "transaction", "a/c", "acct", "upi", "card")
+        .any { text.contains(it) }
+
+    return hasMoneyToken && (senderLooksFinancial || textLooksFinancial)
+}
+
+fun parseExpenseFromSms(sender: String, body: String, dateInMillis: Long): Expense? {
+    if (!looksLikeFinancialSms(sender, body) || !isExpenseDebit(body)) return null
+
+    val amount = extractExpenseAmount(body) ?: return null
+    val merchant = parseMerchantFromText(sender, body)
+
+    return Expense(
+        amount = amount,
+        currency = inferCurrency(body),
+        merchant = merchant,
+        category = inferCategory(merchant, body),
+        dateInMillis = dateInMillis,
+        originalSms = body
+    )
+}
+
+private fun isExpenseDebit(body: String): Boolean {
+    val text = body.lowercase()
+    val debitKeywords = listOf(
+        "debited", "debit", "spent", "paid", "sent", "transferred", "withdrawn",
+        "deducted", "purchase", "payment of", "txn of", "transaction of", "charged"
+    )
+    val hasDebitKeyword = debitKeywords.any { text.contains(it) } ||
+        Regex("(?i)\\bdr\\b").containsMatchIn(body)
+
+    if (!hasDebitKeyword) return false
+
+    val creditOnlyPatterns = listOf(
+        Regex("(?i)credited\\s+(?:to|into)\\s+your"),
+        Regex("(?i)has\\s+been\\s+credited"),
+        Regex("(?i)received\\s+(?:rs\\.?|inr|\\u20B9)"),
+        Regex("(?i)(?:refund|cashback|reversal|reversed|salary|interest)\\b")
+    )
+    val hasDebitAction = listOf("debited", "debit", "spent", "paid", "sent", "withdrawn", "deducted")
+        .any { text.contains(it) }
+    val isCreditOnly = creditOnlyPatterns.any { it.containsMatchIn(body) } && !hasDebitAction
+
+    return !isCreditOnly
+}
+
+private data class AmountCandidate(val amount: Double, val score: Int)
+
+private fun extractExpenseAmount(body: String): Double? {
+    val amountPatterns = listOf(
+        Regex("(?i)(?:rs\\.?|inr|\\u20B9)\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)"),
+        Regex("(?i)([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*(?:rs\\.?|inr)"),
+        Regex("(?i)(?:amount|amt|payment|txn|transaction|purchase|debited)\\s*(?:of|by|for|is|:)?\\s*(?:rs\\.?|inr|\\u20B9)?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")
+    )
+
+    val candidates = amountPatterns.flatMap { regex ->
+        regex.findAll(body).mapNotNull { match ->
+            val rawAmount = match.groupValues.getOrNull(1).orEmpty().replace(",", "")
+            val amount = rawAmount.toDoubleOrNull() ?: return@mapNotNull null
+            AmountCandidate(amount, scoreAmountCandidate(body, match.range.first))
+        }.toList()
+    }
+
+    return candidates
+        .filter { it.amount > 0.0 }
+        .maxByOrNull { it.score }
+        ?.amount
+}
+
+private fun scoreAmountCandidate(body: String, index: Int): Int {
+    val start = (index - 45).coerceAtLeast(0)
+    val end = (index + 45).coerceAtMost(body.length)
+    val window = body.substring(start, end).lowercase()
+    var score = 0
+
+    if (listOf("debited", "debit", "spent", "paid", "payment", "txn", "transaction", "purchase", "withdrawn").any { window.contains(it) }) {
+        score += 10
+    }
+    if (listOf("balance", "available", "avl", "limit", "due", "outstanding").any { window.contains(it) }) {
+        score -= 8
+    }
+
+    return score
+}
+
+private fun inferCurrency(body: String): String =
+    when {
+        Regex("(?i)\\busd\\b|\\$").containsMatchIn(body) -> "USD"
+        Regex("(?i)\\beur\\b").containsMatchIn(body) -> "EUR"
+        else -> "INR"
+    }
+
+private fun inferCategory(merchant: String, body: String): String {
+    val text = "$merchant $body".lowercase()
+    return when {
+        listOf("swiggy", "zomato", "restaurant", "cafe", "food", "dining", "hotel").any { text.contains(it) } -> "Food"
+        listOf("uber", "ola", "rapido", "metro", "fuel", "petrol", "diesel", "transport", "parking").any { text.contains(it) } -> "Transport"
+        listOf("bigbasket", "dmart", "grocery", "groceries", "mart", "supermarket").any { text.contains(it) } -> "Groceries"
+        listOf("electricity", "water", "gas", "mobile", "broadband", "internet", "recharge", "bill").any { text.contains(it) } -> "Utilities"
+        listOf("amazon", "flipkart", "myntra", "shopping", "store").any { text.contains(it) } -> "Shopping"
+        listOf("hospital", "clinic", "pharmacy", "medical", "health", "doctor").any { text.contains(it) } -> "Health"
+        listOf("netflix", "prime", "hotstar", "movie", "cinema", "entertainment", "spotify").any { text.contains(it) } -> "Entertainment"
+        listOf("ride", "cab", "taxi").any { text.contains(it) } -> "Rides"
+        else -> "Other"
+    }
+}
+
+fun parseExpenseFromSmsFallback(sender: String, body: String, dateInMillis: Long): Expense? =
+    parseExpenseFromSms(sender, body, dateInMillis)
+
+private fun legacyParseExpenseFromSmsFallback(sender: String, body: String, dateInMillis: Long): Expense? {
     val expenseKeywords = listOf("spent", "debited", "paid", "sent", "purchase", "txn", "transaction")
     val isLikelyExpense = expenseKeywords.any { body.contains(it, ignoreCase = true) }
     val isCreditOnly = body.contains("credited to your", ignoreCase = true) ||
