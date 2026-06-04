@@ -51,10 +51,30 @@ fun ExpenseTrackerApp(viewModel: MainViewModel = viewModel()) {
     val currentMode by viewModel.currentMode.collectAsStateWithLifecycle()
     val currentSpender by viewModel.currentSpender.collectAsStateWithLifecycle()
     val monthlyBudget by viewModel.monthlyBudget.collectAsStateWithLifecycle()
+    val customDailyLimit by viewModel.customDailyLimit.collectAsStateWithLifecycle()
     val dailyPacingLimit by viewModel.dailyPacingLimit.collectAsStateWithLifecycle()
     val weeklyBudget by viewModel.weeklyBudget.collectAsStateWithLifecycle()
     val weekendAllowance by viewModel.weekendAllowance.collectAsStateWithLifecycle()
     val categoryBudgets by viewModel.categoryBudgets.collectAsStateWithLifecycle()
+    val budgetSummary = remember(
+        expenses,
+        currentMode,
+        customDailyLimit,
+        dailyPacingLimit,
+        monthlyBudget,
+        weeklyBudget,
+        weekendAllowance
+    ) {
+        buildBudgetSummary(
+            expenses = expenses,
+            mode = currentMode,
+            customDailyLimit = customDailyLimit,
+            dailyPacingLimit = dailyPacingLimit,
+            monthlyBudget = monthlyBudget,
+            weeklyBudget = weeklyBudget,
+            weekendAllowance = weekendAllowance
+        )
+    }
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val navController = rememberNavController()
@@ -134,6 +154,7 @@ fun ExpenseTrackerApp(viewModel: MainViewModel = viewModel()) {
             composable("home") {
                 HomeScreen(
                     expenses = expenses,
+                    budgetSummary = budgetSummary,
                     navController = navController,
                     onAddExpense = { viewModel.addExpense(it) },
                     monthlyBudget = monthlyBudget,
@@ -146,12 +167,11 @@ fun ExpenseTrackerApp(viewModel: MainViewModel = viewModel()) {
             }
             
             composable("radar") {
-                val customLimit by viewModel.customDailyLimit.collectAsStateWithLifecycle()
                 SpendRadarScreen(
-                    expenses = expenses,
+                    budgetSummary = budgetSummary,
                     mode = currentMode,
                     onModeSelect = { viewModel.setMode(it) },
-                    customDailyLimit = customLimit,
+                    customDailyLimit = customDailyLimit,
                     onCustomLimitChange = { viewModel.setCustomDailyLimit(it) },
                     currentSpender = currentSpender,
                     onDeleteExpense = { viewModel.deleteExpense(it) }
@@ -167,10 +187,9 @@ fun ExpenseTrackerApp(viewModel: MainViewModel = viewModel()) {
             }
 
             composable("settings") {
-                val customLimit by viewModel.customDailyLimit.collectAsStateWithLifecycle()
                 SettingsScreen(
                     mode = currentMode,
-                    customDailyLimit = customLimit,
+                    customDailyLimit = customDailyLimit,
                     dailyPacingLimit = dailyPacingLimit,
                     monthlyBudget = monthlyBudget,
                     weeklyBudget = weeklyBudget,
@@ -193,7 +212,7 @@ fun ExpenseTrackerApp(viewModel: MainViewModel = viewModel()) {
             
             composable("weekly_dashboard") {
                 WeeklyDashboardScreen(
-                    expenses = expenses,
+                    budgetSummary = budgetSummary,
                     weeklyBudget = weeklyBudget,
                     onWeeklyBudgetChange = { viewModel.setWeeklyBudget(it) },
                     navController = navController
@@ -202,7 +221,7 @@ fun ExpenseTrackerApp(viewModel: MainViewModel = viewModel()) {
 
             composable("monthly_spend") {
                 MonthlyTransactionsScreen(
-                    expenses = expenses, 
+                    budgetSummary = budgetSummary,
                     navController = navController,
                     onDeleteExpense = { viewModel.deleteExpense(it) }
                 )
@@ -210,7 +229,7 @@ fun ExpenseTrackerApp(viewModel: MainViewModel = viewModel()) {
 
             composable("monthly_budget") {
                 MonthlyBudgetScreen(
-                    expenses = expenses,
+                    budgetSummary = budgetSummary,
                     monthlyBudget = monthlyBudget,
                     categoryBudgets = categoryBudgets,
                     onMonthlyBudgetChange = { viewModel.setMonthlyBudget(it) },

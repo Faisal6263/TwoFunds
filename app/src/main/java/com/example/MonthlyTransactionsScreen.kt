@@ -31,26 +31,9 @@ import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MonthlyTransactionsScreen(expenses: List<Expense>, navController: NavController, onDeleteExpense: (Int) -> Unit) {
+fun MonthlyTransactionsScreen(budgetSummary: BudgetSummary, navController: NavController, onDeleteExpense: (Int) -> Unit) {
     var searchQuery by remember { mutableStateOf("") }
-    
-    // Filter to current calendar month
-    val monthlyExpenses = remember(expenses) {
-        val startOfMonthCal = Calendar.getInstance().apply {
-            set(Calendar.DAY_OF_MONTH, 1)
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-        val startOfMonthMillis = startOfMonthCal.timeInMillis
-        startOfMonthCal.add(Calendar.MONTH, 1)
-        val endOfMonthMillis = startOfMonthCal.timeInMillis - 1
-
-        expenses.filter {
-            it.dateInMillis in startOfMonthMillis..endOfMonthMillis
-        }
-    }
+    val monthlyExpenses = budgetSummary.monthlyExpenses
     
     val filteredExpenses = remember(monthlyExpenses, searchQuery) {
         if (searchQuery.isBlank()) {
@@ -64,11 +47,11 @@ fun MonthlyTransactionsScreen(expenses: List<Expense>, navController: NavControl
         }
     }
     
-    val totalSpent = monthlyExpenses.sumOf { it.amount }
-    val husbandTotal = monthlyExpenses.filter { it.spentBy == SpenderProfile.HUSBAND.displayName }.sumOf { it.amount }
-    val wifeTotal = monthlyExpenses.filter { it.spentBy == SpenderProfile.WIFE.displayName }.sumOf { it.amount }
-    val sharedTotal = monthlyExpenses.filter { it.spentBy == SpenderProfile.SHARED.displayName }.sumOf { it.amount }
-    val currentMonthName = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(Date())
+    val totalSpent = budgetSummary.monthlyTotal
+    val husbandTotal = budgetSummary.monthlyProfileTotals[SpenderProfile.HUSBAND] ?: 0.0
+    val wifeTotal = budgetSummary.monthlyProfileTotals[SpenderProfile.WIFE] ?: 0.0
+    val sharedTotal = budgetSummary.monthlyProfileTotals[SpenderProfile.SHARED] ?: 0.0
+    val currentMonthName = budgetSummary.monthName
 
     Scaffold(
         topBar = {

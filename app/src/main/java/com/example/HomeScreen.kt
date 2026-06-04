@@ -54,6 +54,7 @@ private class HomeData(
 @Composable
 fun HomeScreen(
     expenses: List<Expense>,
+    budgetSummary: BudgetSummary,
     navController: NavController,
     onAddExpense: (Expense) -> Unit,
     monthlyBudget: Double,
@@ -118,7 +119,7 @@ fun HomeScreen(
         )
     }
 
-    val homeData = remember(expenses, monthlyBudget, dailyPacingLimit, weekendAllowance) {
+    val homeData = remember(expenses, monthlyBudget, dailyPacingLimit, weekendAllowance, budgetSummary) {
         val todayExpenses = expenses.filter { isToday(it.dateInMillis) }
         val todayTotal = todayExpenses.sumOf { it.amount }
         
@@ -197,18 +198,18 @@ fun HomeScreen(
         val displayExpenses = if (expenses.isNotEmpty()) expenses.take(5) else demoExpenses
 
         HomeData(
-            todayExpenses = todayExpenses,
-            todayTotal = todayTotal,
-            monthlyExpenses = monthlyExpenses,
-            monthlyTotal = monthlyTotal,
-            savedSoFar = savedSoFar,
-            todayLeft = todayLeft,
-            dailyBudget = dailyBudget,
-            thisWeekExpenses = thisWeekExpenses,
-            dailySpentMap = dailySpentMap,
-            accumulatedSavings = accumulatedSavings,
-            currentWeekendBalance = currentWeekendBalance,
-            totalWeekSpent = totalWeekSpent,
+            todayExpenses = budgetSummary.todayExpenses,
+            todayTotal = budgetSummary.todayTotal,
+            monthlyExpenses = budgetSummary.monthlyExpenses,
+            monthlyTotal = budgetSummary.monthlyTotal,
+            savedSoFar = budgetSummary.monthlyRemaining,
+            todayLeft = budgetSummary.todayRemaining,
+            dailyBudget = budgetSummary.activeDailyLimit,
+            thisWeekExpenses = budgetSummary.weekExpenses,
+            dailySpentMap = budgetSummary.dailySpentByCalendarDay,
+            accumulatedSavings = budgetSummary.weekdaySavings,
+            currentWeekendBalance = budgetSummary.weekendFundBalance,
+            totalWeekSpent = budgetSummary.weekTotal,
             displayExpenses = displayExpenses
         )
     }
@@ -223,9 +224,9 @@ fun HomeScreen(
     val accumulatedSavings = homeData.accumulatedSavings
     val monthlyTotal = homeData.monthlyTotal
     val displayExpenses = homeData.displayExpenses
-    val husbandMonthlyTotal = monthlyExpenses.filter { it.spentBy == SpenderProfile.HUSBAND.displayName }.sumOf { it.amount }
-    val wifeMonthlyTotal = monthlyExpenses.filter { it.spentBy == SpenderProfile.WIFE.displayName }.sumOf { it.amount }
-    val sharedMonthlyTotal = monthlyExpenses.filter { it.spentBy == SpenderProfile.SHARED.displayName }.sumOf { it.amount }
+    val husbandMonthlyTotal = budgetSummary.monthlyProfileTotals[SpenderProfile.HUSBAND] ?: 0.0
+    val wifeMonthlyTotal = budgetSummary.monthlyProfileTotals[SpenderProfile.WIFE] ?: 0.0
+    val sharedMonthlyTotal = budgetSummary.monthlyProfileTotals[SpenderProfile.SHARED] ?: 0.0
     val ridesBudget = categoryBudgets["Rides"] ?: 0.0
 
     Column(
@@ -299,7 +300,7 @@ fun HomeScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text("DAILY PACING", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
                         Spacer(modifier = Modifier.height(2.dp))
-                        Text("₹${String.format("%.0f", todayTotal)} / ₹${String.format("%.0f", dailyPacingLimit)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, color = TextPrimary)
+                        Text("₹${String.format("%.0f", todayTotal)} / ₹${String.format("%.0f", homeData.dailyBudget)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, color = TextPrimary)
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text("WEEKLY SPENT", style = MaterialTheme.typography.labelSmall, color = TextSecondary)

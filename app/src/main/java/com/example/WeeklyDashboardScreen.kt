@@ -38,7 +38,7 @@ import java.util.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WeeklyDashboardScreen(
-    expenses: List<Expense>,
+    budgetSummary: BudgetSummary,
     weeklyBudget: Double,
     onWeeklyBudgetChange: (Double) -> Unit,
     navController: NavController
@@ -46,44 +46,8 @@ fun WeeklyDashboardScreen(
     val scrollState = rememberScrollState()
     var showEditBudgetDialog by remember { mutableStateOf(false) }
 
-    // Calendar Calculations
-    // Encapsulate weekly calculations in a single high-efficiency remember block
-    val weeklyData = remember(expenses, weeklyBudget) {
-        val now = Calendar.getInstance()
-        
-        // Set to start of the week (Monday)
-        val startOfWeek = Calendar.getInstance().apply {
-            firstDayOfWeek = Calendar.MONDAY
-            set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-        
-        // Set to end of the week (Sunday 23:59:59)
-        val endOfWeek = Calendar.getInstance().apply {
-            timeInMillis = startOfWeek.timeInMillis
-            add(Calendar.DAY_OF_YEAR, 6)
-            set(Calendar.HOUR_OF_DAY, 23)
-            set(Calendar.MINUTE, 59)
-            set(Calendar.SECOND, 59)
-            set(Calendar.MILLISECOND, 999)
-        }
-
-        // Filter expenses that belong to this week
-        val thisWeekExpenses = expenses.filter {
-            it.dateInMillis >= startOfWeek.timeInMillis && it.dateInMillis <= endOfWeek.timeInMillis
-        }
-        val totalWeekSpent = thisWeekExpenses.sumOf { it.amount }
-        val progress = if (weeklyBudget > 0) (totalWeekSpent / weeklyBudget).toFloat().coerceIn(0f, 1f) else 0f
-
-        Triple(thisWeekExpenses, totalWeekSpent, progress)
-    }
-
-    val thisWeekExpenses = weeklyData.first
-    val totalWeekSpent = weeklyData.second
-    val progress = weeklyData.third
+    val totalWeekSpent = budgetSummary.weekTotal
+    val progress = budgetSummary.weekProgress
 
     // Days list Monday to Sunday
     val daysOfWeek = remember {
@@ -99,21 +63,11 @@ fun WeeklyDashboardScreen(
     }
 
     // Allocate per day budget
-    val dailyAllocation = weeklyBudget / 7.0
+    val dailyAllocation = budgetSummary.weekDailyAllocation
 
-    // Compute spent per day in a highly efficient single-pass grouping
-    val daySpentList = remember(thisWeekExpenses) {
-        val cal = Calendar.getInstance()
-        val dailyTotals = mutableMapOf<Int, Double>().apply {
-            for (i in 1..7) put(i, 0.0)
-        }
-        for (expense in thisWeekExpenses) {
-            cal.timeInMillis = expense.dateInMillis
-            val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
-            dailyTotals[dayOfWeek] = (dailyTotals[dayOfWeek] ?: 0.0) + expense.amount
-        }
+    val daySpentList = remember(budgetSummary) {
         daysOfWeek.map { dayPair ->
-            DaySpentData(dayPair.second, dailyTotals[dayPair.first] ?: 0.0)
+            DaySpentData(dayPair.second, budgetSummary.dailySpentByCalendarDay[dayPair.first] ?: 0.0)
         }
     }
 
@@ -238,7 +192,11 @@ fun WeeklyDashboardScreen(
                         )
                     }
                     
-                    val percentLeft = ((weeklyBudget - totalWeekSpent) / weeklyBudget * 100).coerceAtLeast(0.0)
+                    val percentLeft = if (weeklyBudget > 0.0) {
+                        ((weeklyBudget - totalWeekSpent) / weeklyBudget * 100).coerceAtLeast(0.0)
+                    } else {
+                        0.0
+                    }
                     Text(
                         text = "${percentLeft.toInt()}% remaining",
                         style = MaterialTheme.typography.titleMedium,

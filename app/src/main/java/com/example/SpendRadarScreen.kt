@@ -39,7 +39,7 @@ private class RadarData(
 
 @Composable
 fun SpendRadarScreen(
-    expenses: List<Expense>,
+    budgetSummary: BudgetSummary,
     mode: SpendMode,
     onModeSelect: (SpendMode) -> Unit,
     customDailyLimit: Double,
@@ -51,24 +51,16 @@ fun SpendRadarScreen(
     var showCustomLimitDialog by remember { mutableStateOf(false) }
     var viewProfile by remember { mutableStateOf<SpenderProfile?>(null) }
     
-    val radarData = remember(expenses, mode, customDailyLimit, viewProfile) {
-        val actualDailyLimit = when(mode) {
-            SpendMode.FRUGAL -> 400.0
-            SpendMode.STANDARD -> 800.0
-            SpendMode.SPLURGE -> 1500.0
-            SpendMode.CUSTOM -> customDailyLimit
-        }
-        val todayExpenses = expenses.filter {
-            isToday(it.dateInMillis) && (viewProfile == null || it.spentBy == viewProfile?.displayName)
+    val radarData = remember(budgetSummary, viewProfile) {
+        val actualDailyLimit = budgetSummary.activeDailyLimit
+        val todayExpenses = budgetSummary.todayExpenses.filter {
+            viewProfile == null || it.spentBy == viewProfile?.displayName
         }
         val todayTotal = todayExpenses.sumOf { it.amount }
         val remaining = (actualDailyLimit - todayTotal).coerceAtLeast(0.0)
         val progress = if (actualDailyLimit > 0) (todayTotal / actualDailyLimit).toFloat().coerceIn(0f, 1f) else 0f
         
-        val dateFormat = SimpleDateFormat("EEE, dd MMM yyyy", Locale.getDefault())
-        val todayDateStr = dateFormat.format(Date())
-        
-        RadarData(actualDailyLimit, todayExpenses, todayTotal, remaining, progress, todayDateStr)
+        RadarData(actualDailyLimit, todayExpenses, todayTotal, remaining, progress, budgetSummary.todayDateLabel)
     }
 
     val actualDailyLimit = radarData.actualDailyLimit

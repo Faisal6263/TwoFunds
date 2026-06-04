@@ -72,7 +72,7 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MonthlyBudgetScreen(
-    expenses: List<Expense>,
+    budgetSummary: BudgetSummary,
     monthlyBudget: Double,
     categoryBudgets: Map<String, Double>,
     onMonthlyBudgetChange: (Double) -> Unit,
@@ -82,27 +82,15 @@ fun MonthlyBudgetScreen(
     var showMonthlyDialog by remember { mutableStateOf(false) }
     var categoryToEdit by remember { mutableStateOf<String?>(null) }
 
-    val monthlyExpenses = remember(expenses) {
-        val startOfMonth = Calendar.getInstance().apply {
-            set(Calendar.DAY_OF_MONTH, 1)
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-        val start = startOfMonth.timeInMillis
-        startOfMonth.add(Calendar.MONTH, 1)
-        val end = startOfMonth.timeInMillis - 1
-        expenses.filter { it.dateInMillis in start..end }
-    }
+    val monthlyExpenses = budgetSummary.monthlyExpenses
     val spentByCategory = remember(monthlyExpenses) {
         monthlyExpenses.groupBy { normalizeBudgetCategory(it.category) }
             .mapValues { entry -> entry.value.sumOf { it.amount } }
     }
-    val totalSpent = monthlyExpenses.sumOf { it.amount }
+    val totalSpent = budgetSummary.monthlyTotal
     val assignedBudget = BudgetCategories.sumOf { categoryBudgets[it] ?: 0.0 }
-    val monthName = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(Date())
-    val monthlyProgress = if (monthlyBudget > 0) (totalSpent / monthlyBudget).toFloat().coerceIn(0f, 1f) else 0f
+    val monthName = budgetSummary.monthName
+    val monthlyProgress = budgetSummary.monthlyProgress
 
     Scaffold(
         topBar = {
@@ -291,13 +279,4 @@ private fun BudgetAmountDialog(
         shape = RoundedCornerShape(20.dp),
         containerColor = BgColor
     )
-}
-
-private fun normalizeBudgetCategory(category: String): String {
-    return when (category.lowercase(Locale.ROOT)) {
-        "petrol", "fuel", "ride", "rides", "bike", "two wheeler", "two-wheeler" -> "Rides"
-        "transport", "auto-parsed" -> "Transport"
-        "utility bills", "bills" -> "Utilities"
-        else -> BudgetCategories.firstOrNull { it.equals(category, ignoreCase = true) } ?: "Other"
-    }
 }
