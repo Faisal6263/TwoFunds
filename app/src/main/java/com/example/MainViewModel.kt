@@ -20,18 +20,6 @@ enum class SpendMode(val multiplier: Double, val displayName: String) {
 
 val BudgetCategories = listOf("Food", "Transport", "Groceries", "Utilities", "Shopping", "Health", "Entertainment", "Rides", "Other")
 
-val DefaultCategoryBudgets = linkedMapOf(
-    "Food" to 7000.0,
-    "Transport" to 3500.0,
-    "Groceries" to 6500.0,
-    "Utilities" to 4500.0,
-    "Shopping" to 3500.0,
-    "Health" to 2000.0,
-    "Entertainment" to 2000.0,
-    "Rides" to 2500.0,
-    "Other" to 2000.0
-)
-
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = DefaultDatabase.getInstance(application)
@@ -93,9 +81,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
     val weekendAllowance: StateFlow<Double> = _weekendAllowance.asStateFlow()
 
-    private val _categoryBudgets = MutableStateFlow(loadCategoryBudgets())
-    val categoryBudgets: StateFlow<Map<String, Double>> = _categoryBudgets.asStateFlow()
-
     fun setMode(mode: SpendMode) {
         _currentMode.value = mode
         prefs.edit().putString("current_mode", mode.name).apply()
@@ -129,33 +114,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setWeekendAllowance(allowance: Double) {
         _weekendAllowance.value = allowance
         prefs.edit().putFloat("weekend_allowance", allowance.toFloat()).apply()
-    }
-
-    fun setCategoryBudget(category: String, budget: Double) {
-        val updated = _categoryBudgets.value.toMutableMap()
-        updated[category] = budget
-        _categoryBudgets.value = BudgetCategories.associateWith { updated[it] ?: 0.0 }
-        saveCategoryBudgets(_categoryBudgets.value)
-    }
-
-    private fun loadCategoryBudgets(): Map<String, Double> {
-        val saved = prefs.getString("category_budgets", null) ?: return DefaultCategoryBudgets
-        val parsed = saved.split("|")
-            .mapNotNull { entry ->
-                val parts = entry.split(":", limit = 2)
-                val amount = parts.getOrNull(1)?.toDoubleOrNull()
-                val category = parts.getOrNull(0)
-                if (category.isNullOrBlank() || amount == null) null else category to amount
-            }
-            .toMap()
-        return BudgetCategories.associateWith { parsed[it] ?: DefaultCategoryBudgets[it] ?: 0.0 }
-    }
-
-    private fun saveCategoryBudgets(budgets: Map<String, Double>) {
-        val encoded = BudgetCategories.joinToString("|") { category ->
-            "$category:${budgets[category] ?: 0.0}"
-        }
-        prefs.edit().putString("category_budgets", encoded).apply()
     }
 
     private val _syncMessage = MutableStateFlow<String?>(null)

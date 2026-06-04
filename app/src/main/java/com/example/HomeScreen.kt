@@ -61,8 +61,7 @@ fun HomeScreen(
     dailyPacingLimit: Double,
     weekendAllowance: Double,
     currentSpender: SpenderProfile,
-    onCurrentSpenderChange: (SpenderProfile) -> Unit,
-    categoryBudgets: Map<String, Double>
+    onCurrentSpenderChange: (SpenderProfile) -> Unit
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
 
@@ -227,8 +226,6 @@ fun HomeScreen(
     val husbandMonthlyTotal = budgetSummary.monthlyProfileTotals[SpenderProfile.HUSBAND] ?: 0.0
     val wifeMonthlyTotal = budgetSummary.monthlyProfileTotals[SpenderProfile.WIFE] ?: 0.0
     val sharedMonthlyTotal = budgetSummary.monthlyProfileTotals[SpenderProfile.SHARED] ?: 0.0
-    val ridesBudget = categoryBudgets["Rides"] ?: 0.0
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -441,39 +438,6 @@ fun HomeScreen(
 
         Card(
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF6FF)),
-            border = BorderStroke(1.dp, Color(0xFF60A5FA).copy(alpha = 0.45f)),
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { navController.navigate("monthly_budget") }
-        ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier.size(42.dp).clip(CircleShape).background(Color(0xFF2563EB)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("🧾", fontSize = 20.sp)
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Monthly Budget Split", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = TextPrimary)
-                    Text("Divide categories, set ride budget, and adjust monthly pacing.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("Rides", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = TextSecondary)
-                    Text("₹${String.format("%,.0f", ridesBudget)}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black, color = PrimaryColor)
-                }
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = PrimaryColor)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Card(
-            shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4)),
             border = BorderStroke(1.dp, SuccessGreen.copy(alpha = 0.35f)),
             modifier = Modifier.fillMaxWidth()
@@ -534,27 +498,17 @@ fun HomeScreen(
         }
         Spacer(modifier = Modifier.height(12.dp))
         
-        Card(
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column {
-                val demoExpenses = listOf(
-                    Expense(amount = 540.0, category = "Food", currency = "₹", merchant = "Zomato Chicken Roll", dateInMillis = System.currentTimeMillis(), originalSms = ""),
-                    Expense(amount = 1250.0, category = "Petrol", currency = "₹", merchant = "HPCL Fuel Station", dateInMillis = System.currentTimeMillis(), originalSms = ""),
-                    Expense(amount = 1800.0, category = "Utility Bills", currency = "₹", merchant = "Electricity Bill Payment", dateInMillis = System.currentTimeMillis(), originalSms = ""),
-                    Expense(amount = 1200.0, category = "Shopping", currency = "₹", merchant = "Zara Summer Wear", dateInMillis = System.currentTimeMillis(), originalSms = "")
-                )
-                val displayExpenses = if (expenses.isNotEmpty()) expenses.take(5) else demoExpenses
-                
-                displayExpenses.forEachIndexed { index, exp ->
-                    HomeTransactionItem(exp)
-                    if (index < displayExpenses.size - 1) {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
-                    }
-                }
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            val demoExpenses = listOf(
+                Expense(amount = 540.0, category = "Food", currency = "INR", merchant = "Zomato Chicken Roll", dateInMillis = System.currentTimeMillis(), originalSms = ""),
+                Expense(amount = 1250.0, category = "Petrol", currency = "INR", merchant = "HPCL Fuel Station", dateInMillis = System.currentTimeMillis(), originalSms = ""),
+                Expense(amount = 1800.0, category = "Utility Bills", currency = "INR", merchant = "Electricity Bill Payment", dateInMillis = System.currentTimeMillis(), originalSms = ""),
+                Expense(amount = 1200.0, category = "Shopping", currency = "INR", merchant = "Zara Summer Wear", dateInMillis = System.currentTimeMillis(), originalSms = "")
+            )
+            val displayExpenses = if (expenses.isNotEmpty()) expenses.take(5) else demoExpenses
+
+            displayExpenses.forEach { exp ->
+                HomeTransactionItem(exp)
             }
         }
         
@@ -589,5 +543,16 @@ fun ActionButton(title: String, icon: androidx.compose.ui.graphics.vector.ImageV
 
 @Composable
 fun HomeTransactionItem(expense: Expense) {
-    DetailedExpenseCard(expense = expense)
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+        shadowElevation = 1.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            DetailedExpenseCard(expense = expense)
+        }
+    }
 }

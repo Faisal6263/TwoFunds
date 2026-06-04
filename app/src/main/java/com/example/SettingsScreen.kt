@@ -71,8 +71,7 @@ fun SettingsScreen(
     onWeekendAllowanceChange: (Double) -> Unit,
     onCurrentSpenderChange: (SpenderProfile) -> Unit,
     onOpenSmsSync: () -> Unit,
-    onOpenMonthlyLedger: () -> Unit,
-    onOpenMonthlyBudget: () -> Unit
+    onOpenMonthlyLedger: () -> Unit
 ) {
     var customLimitInput by remember(customDailyLimit) { mutableStateOf(customDailyLimit.toInt().toString()) }
     var dailyPacingInput by remember(dailyPacingLimit) { mutableStateOf(dailyPacingLimit.toInt().toString()) }
@@ -229,13 +228,6 @@ fun SettingsScreen(
             subtitle = "$totalTransactions transactions stored locally.",
             icon = Icons.Outlined.ReceiptLong,
             onClick = onOpenMonthlyLedger
-        )
-
-        SettingsShortcut(
-            title = "Monthly budget split",
-            subtitle = "Divide food, rides, bills, and other category budgets.",
-            icon = Icons.Outlined.AccountBalanceWallet,
-            onClick = onOpenMonthlyBudget
         )
 
         Surface(

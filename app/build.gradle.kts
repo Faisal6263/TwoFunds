@@ -5,6 +5,14 @@ plugins {
   alias(libs.plugins.roborazzi)
 }
 
+val generatedVersionCode = (
+  System.getenv("VERSION_CODE")
+    ?: System.getenv("GITHUB_RUN_NUMBER")
+    ?: "1"
+).toIntOrNull() ?: 1
+
+val generatedVersionName = System.getenv("VERSION_NAME") ?: "1.0.$generatedVersionCode"
+
 android {
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
@@ -13,8 +21,8 @@ android {
     applicationId = "com.aistudio.expensetracker.abcdf"
     minSdk = 26
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    versionCode = generatedVersionCode
+    versionName = generatedVersionName
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
