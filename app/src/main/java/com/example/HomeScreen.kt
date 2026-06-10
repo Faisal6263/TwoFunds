@@ -5,16 +5,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CalendarToday
-import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material.icons.outlined.TwoWheeler
 import androidx.compose.material3.*
@@ -33,20 +32,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.ui.theme.*
-import java.util.*
 
 private class HomeData(
-    val todayExpenses: List<Expense>,
     val todayTotal: Double,
     val monthlyExpenses: List<Expense>,
     val monthlyTotal: Double,
     val savedSoFar: Double,
     val todayLeft: Double,
-    val dailyBudget: Double,
-    val thisWeekExpenses: List<Expense>,
-    val dailySpentMap: Map<Int, Double>,
-    val accumulatedSavings: Double,
-    val currentWeekendBalance: Double,
     val totalWeekSpent: Double,
     val displayExpenses: List<Expense>
 )
@@ -57,9 +49,6 @@ fun HomeScreen(
     budgetSummary: BudgetSummary,
     navController: NavController,
     onAddExpense: (Expense) -> Unit,
-    monthlyBudget: Double,
-    dailyPacingLimit: Double,
-    weekendAllowance: Double,
     currentSpender: SpenderProfile,
     onCurrentSpenderChange: (SpenderProfile) -> Unit
 ) {
@@ -118,76 +107,7 @@ fun HomeScreen(
         )
     }
 
-    val homeData = remember(expenses, monthlyBudget, dailyPacingLimit, weekendAllowance, budgetSummary) {
-        val todayExpenses = expenses.filter { isToday(it.dateInMillis) }
-        val todayTotal = todayExpenses.sumOf { it.amount }
-        
-        // Calculate Monthly using timestamp bounds to avoid instantiating Calendar objects in a loop
-        val calendar = Calendar.getInstance()
-        val startOfMonthCal = Calendar.getInstance().apply {
-            set(Calendar.DAY_OF_MONTH, 1)
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-        val startOfMonthMillis = startOfMonthCal.timeInMillis
-        startOfMonthCal.add(Calendar.MONTH, 1)
-        val endOfMonthMillis = startOfMonthCal.timeInMillis - 1
-        
-        val monthlyExpenses = expenses.filter { 
-            it.dateInMillis in startOfMonthMillis..endOfMonthMillis
-        }
-        val monthlyTotal = monthlyExpenses.sumOf { it.amount }
-        val savedSoFar = (monthlyBudget - monthlyTotal).coerceAtLeast(0.0)
-        
-        val daysInMonth = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
-        val dailyBudget = monthlyBudget / daysInMonth
-        val todayLeft = (dailyBudget - todayTotal).coerceAtLeast(0.0)
-
-        // --- WEEKEND ROLLOVER & SMART PACING WINDOW ---
-        val nowCal = Calendar.getInstance()
-        val currentWeekYear = nowCal.get(Calendar.WEEK_OF_YEAR)
-        val currentYearNo = nowCal.get(Calendar.YEAR)
-
-        // Filter current week's expenses (Monday to Sunday)
-        val thisWeekExpenses = expenses.filter {
-            val expCal = Calendar.getInstance().apply { timeInMillis = it.dateInMillis }
-            expCal.get(Calendar.WEEK_OF_YEAR) == currentWeekYear && expCal.get(Calendar.YEAR) == currentYearNo
-        }
-
-        // Initialize spent arrays
-        val dailySpentMap = mutableMapOf<Int, Double>().apply {
-            for (i in 1..7) put(i, 0.0)
-        }
-        for (exp in thisWeekExpenses) {
-            val expCal = Calendar.getInstance().apply { timeInMillis = exp.dateInMillis }
-            val day = expCal.get(Calendar.DAY_OF_WEEK)
-            dailySpentMap[day] = (dailySpentMap[day] ?: 0.0) + exp.amount
-        }
-
-        val todayDayOfWeekIndex = nowCal.get(Calendar.DAY_OF_WEEK)
-        val weekdaysList = listOf(Calendar.MONDAY, Calendar.TUESDAY, Calendar.WEDNESDAY, Calendar.THURSDAY, Calendar.FRIDAY)
-
-        var accumulatedSavings = 0.0
-        val weekdayPacingLimit = dailyPacingLimit
-
-        for (day in weekdaysList) {
-            val hasDayStarted = when {
-                todayDayOfWeekIndex == Calendar.SUNDAY || todayDayOfWeekIndex == Calendar.SATURDAY -> true
-                else -> day <= todayDayOfWeekIndex
-            }
-            if (hasDayStarted) {
-                val spent = dailySpentMap[day] ?: 0.0
-                val saving = (weekdayPacingLimit - spent).coerceAtLeast(0.0)
-                accumulatedSavings += saving
-            }
-        }
-
-        val baseWeekendAllowance = weekendAllowance
-        val currentWeekendBalance = baseWeekendAllowance + accumulatedSavings
-        val totalWeekSpent = thisWeekExpenses.sumOf { it.amount }
-
+    val homeData = remember(expenses, budgetSummary) {
         val demoExpenses = listOf(
             Expense(amount = 540.0, category = "Food", currency = "₹", merchant = "Zomato Chicken Roll", dateInMillis = System.currentTimeMillis(), originalSms = ""),
             Expense(amount = 1250.0, category = "Petrol", currency = "₹", merchant = "HPCL Fuel Station", dateInMillis = System.currentTimeMillis(), originalSms = ""),
@@ -197,30 +117,21 @@ fun HomeScreen(
         val displayExpenses = if (expenses.isNotEmpty()) expenses.take(5) else demoExpenses
 
         HomeData(
-            todayExpenses = budgetSummary.todayExpenses,
             todayTotal = budgetSummary.todayTotal,
             monthlyExpenses = budgetSummary.monthlyExpenses,
             monthlyTotal = budgetSummary.monthlyTotal,
             savedSoFar = budgetSummary.monthlyRemaining,
             todayLeft = budgetSummary.todayRemaining,
-            dailyBudget = budgetSummary.activeDailyLimit,
-            thisWeekExpenses = budgetSummary.weekExpenses,
-            dailySpentMap = budgetSummary.dailySpentByCalendarDay,
-            accumulatedSavings = budgetSummary.weekdaySavings,
-            currentWeekendBalance = budgetSummary.weekendFundBalance,
             totalWeekSpent = budgetSummary.weekTotal,
             displayExpenses = displayExpenses
         )
     }
 
     val todayLeft = homeData.todayLeft
-    val dailyBudget = homeData.dailyBudget
     val savedSoFar = homeData.savedSoFar
     val monthlyExpenses = homeData.monthlyExpenses
     val todayTotal = homeData.todayTotal
     val totalWeekSpent = homeData.totalWeekSpent
-    val currentWeekendBalance = homeData.currentWeekendBalance
-    val accumulatedSavings = homeData.accumulatedSavings
     val monthlyTotal = homeData.monthlyTotal
     val displayExpenses = homeData.displayExpenses
     val husbandMonthlyTotal = budgetSummary.monthlyProfileTotals[SpenderProfile.HUSBAND] ?: 0.0
@@ -269,169 +180,80 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 1. DYNAMIC BUDGET PACING
-        Card(
-            shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = BorderStroke(1.5.dp, PrimaryColor),
-            modifier = Modifier.fillMaxWidth().clickable { navController.navigate("weekly_dashboard") }
-        ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier.size(32.dp).clip(CircleShape).background(PrimaryContainerColor),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("💵", fontSize = 16.sp)
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text("DYNAMIC BUDGET PACING", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = PrimaryColor, letterSpacing = 1.sp)
-                        Text("Configured on ₹${String.format("%,.0f", monthlyBudget)}/mo plan", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("DAILY PACING", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text("₹${String.format("%.0f", todayTotal)} / ₹${String.format("%.0f", homeData.dailyBudget)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, color = TextPrimary)
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("WEEKLY SPENT", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text("₹${String.format("%.0f", totalWeekSpent)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, color = TextPrimary)
-                    }
-                }
+        Text(
+            text = "BUDGET WINDOWS",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            letterSpacing = 1.sp
+        )
+        Spacer(modifier = Modifier.height(10.dp))
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = CardBorder)
-
-                // Highlighted Weekend Rollover Segment
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFFF0FDF4))
-                        .padding(12.dp)
-                ) {
-                    Column {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("🐷", fontSize = 16.sp)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("WEEKEND FUND BALANCE", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = SuccessGreen)
-                            }
-                            Text("ACTIVE ⚡", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = SuccessGreen)
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "₹${String.format("%,.0f", currentWeekendBalance)}",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Black,
-                            color = SuccessGreen
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Base allowance (₹${String.format("%.0f", weekendAllowance)}) + Weekday Roll: ₹${String.format("%.0f", accumulatedSavings)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF166534),
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "View Weekly Grid & Detail",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = PrimaryColor
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = PrimaryColor,
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 2. LIVE SPENDING RADAR
-        Card(
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF111827)), // Deep navy
-            modifier = Modifier.fillMaxWidth().clickable { navController.navigate("radar") }
-        ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.Explore, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("LIVE SPENDING RADAR", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = PrimaryColor, letterSpacing = 1.sp)
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                    Text("Where & How Can I Spend Today? →", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.weight(1f))
-                    Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(Color(0xFF1F2937)), contentAlignment = Alignment.Center) {
-                         Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Dynamically computed category guidelines based only on parsed SMS transaction messages.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF9CA3AF))
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 3. MONTHLY SPEND AND REMAINING BOXES
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            // Monthly Spend
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { navController.navigate("monthly_spend") }
-            ) {
-                Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Monthly Spend", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("₹${String.format("%.0f", monthlyTotal)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ErrorRed)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("${monthlyExpenses.size} items", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            // Monthly Remaining
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                modifier = Modifier.weight(1f)
-            ) {
-                Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Monthly Remaining", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("₹${String.format("%.0f", savedSoFar)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = PrimaryColor)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("Remaining budget", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
+            BudgetWindowCard(
+                title = "Daily Spend",
+                amount = todayTotal,
+                helper = "Live radar",
+                icon = Icons.Outlined.CalendarToday,
+                tint = ErrorRed,
+                modifier = Modifier.weight(1f),
+                onClick = { navController.navigate("radar") }
+            )
+            BudgetWindowCard(
+                title = "Daily Remaining",
+                amount = todayLeft,
+                helper = "Live radar",
+                icon = Icons.Outlined.CalendarToday,
+                tint = SuccessGreen,
+                modifier = Modifier.weight(1f),
+                onClick = { navController.navigate("radar") }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            BudgetWindowCard(
+                title = "Weekly Spend",
+                amount = totalWeekSpent,
+                helper = "${budgetSummary.weekExpenses.size} items",
+                icon = Icons.Outlined.AccountBalanceWallet,
+                tint = ErrorRed,
+                modifier = Modifier.weight(1f),
+                onClick = { navController.navigate("weekly_dashboard") }
+            )
+            BudgetWindowCard(
+                title = "Weekly Remaining",
+                amount = budgetSummary.weekRemaining,
+                helper = "Calendar grid",
+                icon = Icons.Outlined.AccountBalanceWallet,
+                tint = PrimaryColor,
+                modifier = Modifier.weight(1f),
+                onClick = { navController.navigate("weekly_dashboard") }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            BudgetWindowCard(
+                title = "Monthly Spend",
+                amount = monthlyTotal,
+                helper = "${monthlyExpenses.size} items",
+                icon = Icons.Outlined.CalendarMonth,
+                tint = ErrorRed,
+                modifier = Modifier.weight(1f),
+                onClick = { navController.navigate("monthly_spend") }
+            )
+            BudgetWindowCard(
+                title = "Monthly Remaining",
+                amount = savedSoFar,
+                helper = budgetSummary.monthName,
+                icon = Icons.Outlined.CalendarMonth,
+                tint = PrimaryColor,
+                modifier = Modifier.weight(1f),
+                onClick = { navController.navigate("monthly_spend") }
+            )
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -499,20 +321,74 @@ fun HomeScreen(
         Spacer(modifier = Modifier.height(12.dp))
         
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            val demoExpenses = listOf(
-                Expense(amount = 540.0, category = "Food", currency = "INR", merchant = "Zomato Chicken Roll", dateInMillis = System.currentTimeMillis(), originalSms = ""),
-                Expense(amount = 1250.0, category = "Petrol", currency = "INR", merchant = "HPCL Fuel Station", dateInMillis = System.currentTimeMillis(), originalSms = ""),
-                Expense(amount = 1800.0, category = "Utility Bills", currency = "INR", merchant = "Electricity Bill Payment", dateInMillis = System.currentTimeMillis(), originalSms = ""),
-                Expense(amount = 1200.0, category = "Shopping", currency = "INR", merchant = "Zara Summer Wear", dateInMillis = System.currentTimeMillis(), originalSms = "")
-            )
-            val displayExpenses = if (expenses.isNotEmpty()) expenses.take(5) else demoExpenses
-
             displayExpenses.forEach { exp ->
                 HomeTransactionItem(exp)
             }
         }
         
         Spacer(modifier = Modifier.height(64.dp))
+    }
+}
+
+@Composable
+private fun BudgetWindowCard(
+    title: String,
+    amount: Double,
+    helper: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tint: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = modifier
+            .heightIn(min = 132.dp)
+            .clickable { onClick() }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(tint.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+                }
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Text(
+                title,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                "₹${String.format("%,.0f", amount)}",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Black,
+                color = tint
+            )
+            Text(helper, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+        }
     }
 }
 
