@@ -156,9 +156,6 @@ fun ExpenseTrackerApp(viewModel: MainViewModel = viewModel()) {
                     budgetSummary = budgetSummary,
                     navController = navController,
                     onAddExpense = { viewModel.addExpense(it) },
-                    monthlyBudget = monthlyBudget,
-                    dailyPacingLimit = dailyPacingLimit,
-                    weekendAllowance = weekendAllowance,
                     currentSpender = currentSpender,
                     onCurrentSpenderChange = { viewModel.setCurrentSpender(it) }
                 )
