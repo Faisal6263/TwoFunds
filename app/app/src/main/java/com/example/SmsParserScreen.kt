@@ -2,6 +2,7 @@ package com.example
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -31,6 +32,23 @@ import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
 import com.example.ui.theme.*
+import java.util.Calendar
+import java.util.Locale
+
+private enum class SmsPeriodFilter(val label: String) {
+    TODAY("Today"),
+    WEEK("This Week"),
+    MONTH("This Month"),
+    ALL("All")
+}
+
+private enum class SmsSortOption(val label: String) {
+    NEWEST("Newest"),
+    OLDEST("Oldest"),
+    HIGH_AMOUNT("High Amount"),
+    LOW_AMOUNT("Low Amount"),
+    MERCHANT("Merchant")
+}
 
 @Composable
 fun SmsParserScreen(viewModel: MainViewModel) {
@@ -41,6 +59,8 @@ fun SmsParserScreen(viewModel: MainViewModel) {
     val coroutineScope = rememberCoroutineScope()
     var scanDays by remember { mutableStateOf(7) }
     var searchQuery by remember { mutableStateOf("") }
+    var periodFilter by remember { mutableStateOf(SmsPeriodFilter.ALL) }
+    var sortOption by remember { mutableStateOf(SmsSortOption.NEWEST) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -54,23 +74,25 @@ fun SmsParserScreen(viewModel: MainViewModel) {
     }
 
     val parsedData = remember(expenses) {
-        val parsedExpenses = expenses.filter { it.originalSms.isNotBlank() }
+        val parsedExpenses = expenses.filter { it.isSmsTransaction() }
         val totalAmount = parsedExpenses.sumOf { it.amount }
         Pair(parsedExpenses, totalAmount)
     }
     val parsedExpenses = parsedData.first
     val totalAmount = parsedData.second
-    val filteredExpenses = remember(parsedExpenses, searchQuery) {
-        if (searchQuery.isBlank()) {
-            parsedExpenses
+    val filteredExpenses = remember(parsedExpenses, searchQuery, periodFilter, sortOption) {
+        val periodExpenses = parsedExpenses.filterByPeriod(periodFilter)
+        val searchedExpenses = if (searchQuery.isBlank()) {
+            periodExpenses
         } else {
-            parsedExpenses.filter { expense ->
+            periodExpenses.filter { expense ->
                 expense.originalSms.contains(searchQuery, ignoreCase = true) ||
                     expense.merchant.contains(searchQuery, ignoreCase = true) ||
                     expense.category.contains(searchQuery, ignoreCase = true) ||
                     expense.amount.toString().contains(searchQuery, ignoreCase = true)
             }
         }
+        searchedExpenses.sortedByOption(sortOption)
     }
 
     Column(
@@ -204,8 +226,40 @@ fun SmsParserScreen(viewModel: MainViewModel) {
             singleLine = true
         )
 
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("SHOW", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, letterSpacing = 2.sp)
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            SmsPeriodFilter.entries.forEach { option ->
+                FilterChip(
+                    selected = periodFilter == option,
+                    onClick = { periodFilter = option },
+                    label = { Text(option.label) }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("SORT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, letterSpacing = 2.sp)
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            SmsSortOption.entries.forEach { option ->
+                FilterChip(
+                    selected = sortOption == option,
+                    onClick = { sortOption = option },
+                    label = { Text(option.label) }
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(24.dp))
-        Text("PARSER PREVIEW (${filteredExpenses.size} items)", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, letterSpacing = 2.sp)
+        Text("${periodFilter.label.uppercase(Locale.getDefault())} TRANSACTION SMS (${filteredExpenses.size} items)", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, letterSpacing = 2.sp)
         Spacer(modifier = Modifier.height(16.dp))
         
         if (filteredExpenses.isEmpty()) {
@@ -224,6 +278,56 @@ fun SmsParserScreen(viewModel: MainViewModel) {
         Spacer(modifier = Modifier.height(64.dp))
     }
 }
+
+private fun List<Expense>.filterByPeriod(periodFilter: SmsPeriodFilter): List<Expense> {
+    val now = Calendar.getInstance()
+    val startMillis = when (periodFilter) {
+        SmsPeriodFilter.TODAY -> now.startOfDayMillis()
+        SmsPeriodFilter.WEEK -> now.startOfWeekMillis()
+        SmsPeriodFilter.MONTH -> now.startOfMonthMillis()
+        SmsPeriodFilter.ALL -> Long.MIN_VALUE
+    }
+    return filter { it.dateInMillis >= startMillis }
+}
+
+private fun List<Expense>.sortedByOption(sortOption: SmsSortOption): List<Expense> =
+    when (sortOption) {
+        SmsSortOption.NEWEST -> sortedByDescending { it.dateInMillis }
+        SmsSortOption.OLDEST -> sortedBy { it.dateInMillis }
+        SmsSortOption.HIGH_AMOUNT -> sortedByDescending { it.amount }
+        SmsSortOption.LOW_AMOUNT -> sortedBy { it.amount }
+        SmsSortOption.MERCHANT -> sortedWith(compareBy<Expense, String>(String.CASE_INSENSITIVE_ORDER) { it.merchant })
+    }
+
+private fun Calendar.startOfDayMillis(): Long =
+    cloneCalendar().apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+private fun Calendar.startOfWeekMillis(): Long =
+    cloneCalendar().apply {
+        firstDayOfWeek = Calendar.MONDAY
+        set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+private fun Calendar.startOfMonthMillis(): Long =
+    cloneCalendar().apply {
+        set(Calendar.DAY_OF_MONTH, 1)
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+private fun Calendar.cloneCalendar(): Calendar =
+    (clone() as Calendar)
 
 @Composable
 fun SmsPreviewCard(expense: Expense, onDelete: (Int) -> Unit) {

@@ -120,6 +120,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _syncMessage = MutableStateFlow<String?>(null)
     val syncMessage: StateFlow<String?> = _syncMessage.asStateFlow()
 
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.removeDeletedSmsBackedExpenses { DeletedSmsStore.isDeleted(appContext, it) }
+        }
+    }
+
     fun clearSyncMessage() {
         _syncMessage.value = null
     }
@@ -141,11 +147,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         ?.copy(spentBy = _currentSpender.value.displayName)
                 }
 
-                if (expenses.isNotEmpty()) {
-                    repository.insertAll(expenses)
-                }
+                val insertedCount = if (expenses.isNotEmpty()) repository.insertAll(expenses) else 0
 
-                _syncMessage.value = "Local sync complete. Found ${expenses.size} new expenses."
+                _syncMessage.value = "Local sync complete. Added $insertedCount new expenses."
             } catch (e: Exception) {
                 e.printStackTrace()
                 _syncMessage.value = "Error during sync: ${e.message}"
@@ -163,8 +167,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteExpense(id: Int) {
         viewModelScope.launch {
-            val expense = uiState.value.find { it.id == id }
-            if (expense != null && expense.originalSms.isNotBlank()) {
+            val expense = uiState.value.find { it.id == id } ?: repository.getById(id)
+            if (expense != null && expense.isSmsTransaction()) {
+                repository.rememberDeleted(expense)
                 DeletedSmsStore.rememberDeleted(appContext, expense.originalSms)
             }
             repository.deleteById(id)

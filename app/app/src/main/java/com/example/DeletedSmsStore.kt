@@ -1,7 +1,6 @@
 package com.example
 
 import android.content.Context
-import java.util.Locale
 
 object DeletedSmsStore {
     private const val PREFS_NAME = "spend_radar_prefs"
@@ -16,7 +15,7 @@ object DeletedSmsStore {
         val deletedFingerprints = prefs.getStringSet(DELETED_SMS_FINGERPRINTS_KEY, emptySet()).orEmpty().toMutableSet()
 
         deletedBodies.add(smsBody)
-        smsBody.fingerprintSms()?.let { deletedFingerprints.add(it) }
+        smsBody.toSmsFingerprint()?.let { deletedFingerprints.add(it) }
 
         prefs.edit()
             .putStringSet(DELETED_SMS_KEY, deletedBodies)
@@ -32,13 +31,8 @@ object DeletedSmsStore {
         if (smsBody in deletedBodies) return true
 
         val deletedFingerprints = prefs.getStringSet(DELETED_SMS_FINGERPRINTS_KEY, emptySet()).orEmpty() +
-            deletedBodies.mapNotNull { it.fingerprintSms() }
-        val smsFingerprint = smsBody.fingerprintSms()
+            deletedBodies.mapNotNull { it.toSmsFingerprint() }
+        val smsFingerprint = smsBody.toSmsFingerprint()
         return smsFingerprint != null && smsFingerprint in deletedFingerprints
-    }
-
-    private fun String.fingerprintSms(): String? {
-        val normalized = lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]"), "")
-        return normalized.takeIf { it.isNotBlank() }
     }
 }
