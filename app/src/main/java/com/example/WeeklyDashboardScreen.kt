@@ -45,6 +45,7 @@ fun WeeklyDashboardScreen(
 ) {
     val scrollState = rememberScrollState()
     var showEditBudgetDialog by remember { mutableStateOf(false) }
+    var selectedDay by remember { mutableStateOf<DaySpentData?>(null) }
 
     val totalWeekSpent = budgetSummary.weekTotal
     val progress = budgetSummary.weekProgress
@@ -67,7 +68,15 @@ fun WeeklyDashboardScreen(
 
     val daySpentList = remember(budgetSummary) {
         daysOfWeek.map { dayPair ->
-            DaySpentData(dayPair.second, budgetSummary.dailySpentByCalendarDay[dayPair.first] ?: 0.0)
+            val dayExpenses = budgetSummary.weekExpenses.filter { expense ->
+                Calendar.getInstance().apply { timeInMillis = expense.dateInMillis }
+                    .get(Calendar.DAY_OF_WEEK) == dayPair.first
+            }
+            DaySpentData(
+                dayName = dayPair.second,
+                spent = budgetSummary.dailySpentByCalendarDay[dayPair.first] ?: 0.0,
+                expenses = dayExpenses.sortedByDescending { it.dateInMillis }
+            )
         }
     }
 
@@ -290,6 +299,7 @@ fun WeeklyDashboardScreen(
                         ),
                         modifier = Modifier
                             .weight(1f)
+                            .clickable { selectedDay = dayData }
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Text(
@@ -320,6 +330,12 @@ fun WeeklyDashboardScreen(
                                         color = if (isZero) TextPrimary
                                         else if (isOver) ErrorRed
                                         else SuccessGreen
+                                    )
+                                    Text(
+                                        text = "${dayData.expenses.size} transactions",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = TextSecondary,
+                                        fontSize = 10.sp
                                     )
                                 }
                                 Column(horizontalAlignment = Alignment.End) {
@@ -363,6 +379,15 @@ fun WeeklyDashboardScreen(
                                     fontSize = 10.sp
                                 )
                             }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Tap to view transactions",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = PrimaryColor,
+                                fontSize = 10.sp,
+                                modifier = Modifier.align(Alignment.CenterHorizontally)
+                            )
                         }
                     }
                 }
@@ -373,6 +398,55 @@ fun WeeklyDashboardScreen(
         }
 
         Spacer(modifier = Modifier.height(80.dp))
+
+        selectedDay?.let { day ->
+            AlertDialog(
+                onDismissRequest = { selectedDay = null },
+                title = {
+                    Column {
+                        Text(
+                            text = day.dayName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "${day.expenses.size} transactions - Rs.${String.format("%,.0f", day.spent)} spent",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                    }
+                },
+                text = {
+                    if (day.expenses.isEmpty()) {
+                        Text(
+                            text = "No transactions found for this day.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary
+                        )
+                    } else {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 420.dp)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            day.expenses.forEach { expense ->
+                                DetailedExpenseCard(expense = expense)
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { selectedDay = null }) {
+                        Text("Close", color = PrimaryColor)
+                    }
+                },
+                containerColor = BgColor,
+                shape = RoundedCornerShape(24.dp)
+            )
+        }
 
         // Dialog for editing weekly budget
         if (showEditBudgetDialog) {
@@ -440,5 +514,6 @@ fun WeeklyDashboardScreen(
 
 data class DaySpentData(
     val dayName: String,
-    val spent: Double
+    val spent: Double,
+    val expenses: List<Expense>
 )
