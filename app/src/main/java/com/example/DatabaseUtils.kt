@@ -11,6 +11,27 @@ private val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
+private val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS deleted_transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                merchantKey TEXT NOT NULL,
+                amountCents INTEGER NOT NULL,
+                dayBucket INTEGER NOT NULL,
+                minuteBucket INTEGER NOT NULL,
+                smsFingerprint TEXT NOT NULL,
+                deletedAtMillis INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS index_deleted_transactions_merchantKey_amountCents_dayBucket_minuteBucket ON deleted_transactions (merchantKey, amountCents, dayBucket, minuteBucket)"
+        )
+    }
+}
+
 object DefaultDatabase {
     @Volatile
     private var INSTANCE: AppDatabase? = null
@@ -23,6 +44,7 @@ object DefaultDatabase {
                 "expenses-database"
             )
             .addMigrations(MIGRATION_2_3)
+            .addMigrations(MIGRATION_3_4)
             .fallbackToDestructiveMigration()
             .build()
             INSTANCE = instance

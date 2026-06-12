@@ -21,10 +21,12 @@ class SmsReceiver : BroadcastReceiver() {
                     val pendingResult = goAsync()
                     CoroutineScope(Dispatchers.IO).launch {
                         try {
-                            val db = DefaultDatabase.getInstance(context)
-                            val repository = ExpenseRepository(db.expenseDao())
-                            parseExpenseFromSms(address, body, messageTimestamp)?.let { expense ->
-                                repository.insert(expense)
+                            if (!DeletedSmsStore.isDeleted(context, body)) {
+                                val db = DefaultDatabase.getInstance(context)
+                                val repository = ExpenseRepository(db.expenseDao())
+                                parseExpenseFromSms(address, body, messageTimestamp)?.let { expense ->
+                                    repository.insert(expense)
+                                }
                             }
                         } catch (e: Exception) {
                             e.printStackTrace()

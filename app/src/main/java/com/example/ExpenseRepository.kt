@@ -28,6 +28,8 @@ class ExpenseRepository(private val expenseDao: ExpenseDao) {
     }
 
     suspend fun insert(expense: Expense) {
+        if (expense.isSmsTransaction() && expenseDao.getDeletedTransactions().matchesDeletedTransaction(expense)) return
+
         val existing = expenseDao.getExpensesList()
         val cleanNewSms = if (expense.originalSms.isBlank()) "" else expense.originalSms.lowercase().replace(Regex("[^a-z0-9]"), "")
         val hasDuplicate = existing.any { old ->
@@ -43,7 +45,8 @@ class ExpenseRepository(private val expenseDao: ExpenseDao) {
         }
     }
     
-    suspend fun insertAll(expenses: List<Expense>) {
+    suspend fun insertAll(expenses: List<Expense>): Int {
+        val deletedTransactions = expenseDao.getDeletedTransactions()
         val existing = expenseDao.getExpensesList()
         val existingSmsSet = existing.mapNotNull { 
             val clean = it.originalSms.lowercase().replace(Regex("[^a-z0-9]"), "")
@@ -58,6 +61,10 @@ class ExpenseRepository(private val expenseDao: ExpenseDao) {
         val nonDuplicates = mutableListOf<Expense>()
         
         for (expense in expenses) {
+            if (expense.isSmsTransaction() && deletedTransactions.matchesDeletedTransaction(expense)) {
+                continue
+            }
+
             val cleanNewSms = if (expense.originalSms.isBlank()) "" else expense.originalSms.lowercase().replace(Regex("[^a-z0-9]"), "")
             
             var isDup = false
@@ -88,6 +95,24 @@ class ExpenseRepository(private val expenseDao: ExpenseDao) {
         if (nonDuplicates.isNotEmpty()) {
             expenseDao.insertAll(nonDuplicates)
         }
+        return nonDuplicates.size
+    }
+
+    suspend fun getById(id: Int): Expense? = expenseDao.getExpenseById(id)
+
+    suspend fun rememberDeleted(expense: Expense) {
+        expenseDao.insertDeletedTransaction(expense.toDeletedTransaction())
+    }
+
+    suspend fun removeDeletedSmsBackedExpenses(isDeletedSmsBody: (String) -> Boolean): Int {
+        val deletedTransactions = expenseDao.getDeletedTransactions()
+        val expensesToRemove = expenseDao.getExpensesList().filter { expense ->
+            expense.isSmsTransaction() &&
+                (isDeletedSmsBody(expense.originalSms) || deletedTransactions.matchesDeletedTransaction(expense))
+        }
+
+        expensesToRemove.forEach { expenseDao.deleteExpenseById(it.id) }
+        return expensesToRemove.size
     }
 
     suspend fun deleteById(id: Int) = expenseDao.deleteExpenseById(id)
