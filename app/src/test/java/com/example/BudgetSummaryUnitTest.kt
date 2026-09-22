@@ -27,8 +27,9 @@ class BudgetSummaryUnitTest {
         val expenses = listOf(
             Expense(amount = 100.0, currency = "INR", merchant = "Cafe", category = "Food", dateInMillis = monday.timeInMillis, originalSms = "monday"),
             Expense(amount = 250.0, currency = "INR", merchant = "Metro", category = "Transport", dateInMillis = today.timeInMillis, originalSms = "today"),
-            Expense(amount = 700.0, currency = "INR", merchant = "Refund", category = "Other", dateInMillis = today.timeInMillis, originalSms = "credited to Faisal62632@ibl", transactionType = TransactionType.CREDIT.name),
-            Expense(amount = 5000.0, currency = "INR", merchant = "Other Credit", category = "Other", dateInMillis = today.timeInMillis, originalSms = "credited to someoneelse@ibl", transactionType = TransactionType.CREDIT.name),
+            Expense(amount = 700.0, currency = "INR", merchant = "Refund", category = "Other", dateInMillis = today.timeInMillis, originalSms = "credited to Faisal62632@ibl", transactionType = TransactionType.CREDIT.name, sourceSender = "AX-ICICIB"),
+            Expense(amount = 5000.0, currency = "INR", merchant = "Other Credit", category = "Other", dateInMillis = today.timeInMillis, originalSms = "credited to someoneelse@ibl", transactionType = TransactionType.CREDIT.name, sourceSender = "AX-ICICIB"),
+            Expense(amount = 3000.0, currency = "INR", merchant = "Other Bank", category = "Other", dateInMillis = today.timeInMillis, originalSms = "credited to Faisal62632@ibl", transactionType = TransactionType.CREDIT.name, sourceSender = "VK-SBIBK"),
             Expense(amount = 999.0, currency = "INR", merchant = "Old", category = "Other", dateInMillis = previousMonth.timeInMillis, originalSms = "old")
         )
 

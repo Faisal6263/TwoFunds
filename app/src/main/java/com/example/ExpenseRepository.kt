@@ -36,7 +36,12 @@ class ExpenseRepository(private val expenseDao: ExpenseDao) {
         val hasDuplicate = existing.any { old ->
             if (cleanNewSms.isNotEmpty() && old.originalSms.isNotBlank()) {
                 val cleanOldSms = old.originalSms.lowercase().replace(Regex("[^a-z0-9]"), "")
-                if (cleanNewSms == cleanOldSms) return@any true
+                if (cleanNewSms == cleanOldSms) {
+                    if (old.sourceSender.isBlank() && expense.sourceSender.isNotBlank()) {
+                        expenseDao.insertExpense(old.copy(sourceSender = expense.sourceSender))
+                    }
+                    return@any true
+                }
             }
             val timeDiff = Math.abs(expense.dateInMillis - old.dateInMillis)
             timeDiff < 300000 && expense.amount == old.amount &&
@@ -51,10 +56,10 @@ class ExpenseRepository(private val expenseDao: ExpenseDao) {
     suspend fun insertAll(expenses: List<Expense>): Int {
         val deletedTransactions = expenseDao.getDeletedTransactions()
         val existing = expenseDao.getExpensesList()
-        val existingSmsSet = existing.mapNotNull { 
+        val existingSmsByFingerprint = existing.mapNotNull {
             val clean = it.originalSms.lowercase().replace(Regex("[^a-z0-9]"), "")
-            if (clean.isEmpty()) null else clean 
-        }.toMutableSet()
+            if (clean.isEmpty()) null else clean to it
+        }.toMap().toMutableMap()
         
         // Group existing by amount to avoid iterating the whole database for window checks
         val existingByAmount = existing.groupBy { it.amount }.mapValues { entry ->
@@ -62,6 +67,7 @@ class ExpenseRepository(private val expenseDao: ExpenseDao) {
         }.toMutableMap()
         
         val nonDuplicates = mutableListOf<Expense>()
+        val senderMetadataUpdates = mutableListOf<Expense>()
         
         for (expense in expenses) {
             if (expense.isSmsTransaction() && deletedTransactions.matchesDeletedTransaction(expense)) {
@@ -71,7 +77,13 @@ class ExpenseRepository(private val expenseDao: ExpenseDao) {
             val cleanNewSms = if (expense.originalSms.isBlank()) "" else expense.originalSms.lowercase().replace(Regex("[^a-z0-9]"), "")
             
             var isDup = false
-            if (cleanNewSms.isNotEmpty() && existingSmsSet.contains(cleanNewSms)) {
+            if (cleanNewSms.isNotEmpty() && existingSmsByFingerprint.containsKey(cleanNewSms)) {
+                val existingExpense = existingSmsByFingerprint.getValue(cleanNewSms)
+                if (existingExpense.sourceSender.isBlank() && expense.sourceSender.isNotBlank()) {
+                    val updatedExpense = existingExpense.copy(sourceSender = expense.sourceSender)
+                    senderMetadataUpdates.add(updatedExpense)
+                    existingSmsByFingerprint[cleanNewSms] = updatedExpense
+                }
                 isDup = true
             } else {
                 // Check similar transaction window (within 5 minutes, same amount and merchant) from existing list by amount
@@ -90,13 +102,14 @@ class ExpenseRepository(private val expenseDao: ExpenseDao) {
             if (!isDup) {
                 nonDuplicates.add(expense)
                 if (cleanNewSms.isNotEmpty()) {
-                    existingSmsSet.add(cleanNewSms)
+                    existingSmsByFingerprint[cleanNewSms] = expense
                 }
                 existingByAmount.getOrPut(expense.amount) { mutableListOf() }.add(expense)
             }
         }
-        if (nonDuplicates.isNotEmpty()) {
-            expenseDao.insertAll(nonDuplicates)
+        val recordsToSave = senderMetadataUpdates + nonDuplicates
+        if (recordsToSave.isNotEmpty()) {
+            expenseDao.insertAll(recordsToSave)
         }
         return nonDuplicates.size
     }

@@ -43,6 +43,12 @@ private val MIGRATION_4_5 = object : Migration(4, 5) {
     }
 }
 
+private val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE expenses ADD COLUMN sourceSender TEXT NOT NULL DEFAULT ''")
+    }
+}
+
 object DefaultDatabase {
     @Volatile
     private var INSTANCE: AppDatabase? = null
@@ -57,6 +63,7 @@ object DefaultDatabase {
             .addMigrations(MIGRATION_2_3)
             .addMigrations(MIGRATION_3_4)
             .addMigrations(MIGRATION_4_5)
+            .addMigrations(MIGRATION_5_6)
             .fallbackToDestructiveMigration()
             .build()
             INSTANCE = instance
@@ -168,7 +175,7 @@ fun parseExpenseFromSms(sender: String, body: String, dateInMillis: Long): Expen
 
     // Only incoming money addressed to the owner's UPI ID belongs in budget reports.
     // This prevents credits for another account or VPA from inflating the available budget.
-    if (transactionType == TransactionType.CREDIT && !body.containsTrackedCreditUpi()) return null
+    if (transactionType == TransactionType.CREDIT && !isTrackedCreditDestination(sender, body)) return null
 
     val amount = extractExpenseAmount(body) ?: return null
     val merchant = parseMerchantFromText(sender, body)
@@ -180,7 +187,8 @@ fun parseExpenseFromSms(sender: String, body: String, dateInMillis: Long): Expen
         category = if (transactionType == TransactionType.CREDIT) inferCreditCategory(body) else inferCategory(merchant, body),
         dateInMillis = dateInMillis,
         originalSms = body,
-        transactionType = transactionType.name
+        transactionType = transactionType.name,
+        sourceSender = sender
     )
 }
 
@@ -331,6 +339,7 @@ private fun legacyParseExpenseFromSmsFallback(sender: String, body: String, date
         merchant = parseMerchantFromText(sender, body),
         category = "Auto-Parsed",
         dateInMillis = dateInMillis,
-        originalSms = body
+        originalSms = body,
+        sourceSender = sender
     )
 }
