@@ -3,11 +3,13 @@ package com.example
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Search
@@ -33,6 +35,7 @@ import java.util.*
 @Composable
 fun MonthlyTransactionsScreen(budgetSummary: BudgetSummary, navController: NavController, onDeleteExpense: (Int) -> Unit) {
     var searchQuery by remember { mutableStateOf("") }
+    var selectedDay by remember { mutableStateOf<MonthlyDayData?>(null) }
     val monthlyExpenses = budgetSummary.monthlyExpenses
     
     val filteredExpenses = remember(monthlyExpenses, searchQuery) {
@@ -53,6 +56,84 @@ fun MonthlyTransactionsScreen(budgetSummary: BudgetSummary, navController: NavCo
     val wifeTotal = budgetSummary.monthlyProfileTotals[SpenderProfile.WIFE] ?: 0.0
     val sharedTotal = budgetSummary.monthlyProfileTotals[SpenderProfile.SHARED] ?: 0.0
     val currentMonthName = budgetSummary.monthName
+
+    val monthlyDayCards = remember(monthlyExpenses, currentMonthName) {
+        val currentMonth = Calendar.getInstance().apply {
+            set(Calendar.DAY_OF_MONTH, 1)
+        }
+        val daysInMonth = currentMonth.getActualMaximum(Calendar.DAY_OF_MONTH)
+        val dayLabelFormatter = SimpleDateFormat("EEE • dd MMM", Locale.getDefault())
+
+        (1..daysInMonth).map { dayOfMonth ->
+            val dayCalendar = (currentMonth.clone() as Calendar).apply {
+                set(Calendar.DAY_OF_MONTH, dayOfMonth)
+            }
+            val dayTransactions = monthlyExpenses.filter { expense ->
+                val expenseCalendar = Calendar.getInstance().apply {
+                    timeInMillis = expense.dateInMillis
+                }
+                expenseCalendar.get(Calendar.YEAR) == dayCalendar.get(Calendar.YEAR) &&
+                    expenseCalendar.get(Calendar.MONTH) == dayCalendar.get(Calendar.MONTH) &&
+                    expenseCalendar.get(Calendar.DAY_OF_MONTH) == dayOfMonth
+            }.sortedByDescending { it.dateInMillis }
+
+            MonthlyDayData(
+                dayLabel = dayLabelFormatter.format(dayCalendar.time),
+                spent = dayTransactions.filter { it.isDebit }.sumOf { it.amount },
+                credited = dayTransactions.filter { it.isCredit }.sumOf { it.amount },
+                transactions = dayTransactions
+            )
+        }
+    }
+
+    selectedDay?.let { day ->
+        AlertDialog(
+            onDismissRequest = { selectedDay = null },
+            title = {
+                Column {
+                    Text(
+                        text = day.dayLabel,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = "${day.transactions.size} transactions • Rs.${String.format("%,.0f", day.spent)} spent • Rs.${String.format("%,.0f", day.credited)} credited",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                }
+            },
+            text = {
+                if (day.transactions.isEmpty()) {
+                    Text(
+                        text = "No transactions found for this day.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 420.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        day.transactions.forEach { expense ->
+                            DetailedExpenseCard(expense = expense)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { selectedDay = null }) {
+                    Text("Close", color = PrimaryColor)
+                }
+            },
+            containerColor = BgColor,
+            shape = RoundedCornerShape(24.dp)
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -152,6 +233,45 @@ fun MonthlyTransactionsScreen(budgetSummary: BudgetSummary, navController: NavCo
                         MonthlyProfileTotal("👨 Husband", husbandTotal, Modifier.weight(1f))
                         MonthlyProfileTotal("👩 Wife", wifeTotal, Modifier.weight(1f))
                         MonthlyProfileTotal("🤝 Shared", sharedTotal, Modifier.weight(1f))
+                    }
+                }
+            }
+
+            item {
+                Column {
+                    Text(
+                        text = "CALENDAR TYPE MONTHLY GRID",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = TextSecondary,
+                        letterSpacing = 1.sp,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                    Text(
+                        text = "${monthlyDayCards.size} days • Tap a day to view transactions",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                    )
+
+                    monthlyDayCards.chunked(2).forEach { rowDays ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            rowDays.forEach { day ->
+                                MonthlyDayCard(
+                                    day = day,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = { selectedDay = day }
+                                )
+                            }
+                            if (rowDays.size == 1) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
                     }
                 }
             }
@@ -265,6 +385,95 @@ fun MonthlyTransactionsScreen(budgetSummary: BudgetSummary, navController: NavCo
                     TransactionRowItem(expense, onDeleteExpense)
                 }
             }
+        }
+    }
+}
+
+private data class MonthlyDayData(
+    val dayLabel: String,
+    val spent: Double,
+    val credited: Double,
+    val transactions: List<Expense>
+)
+
+@Composable
+private fun MonthlyDayCard(
+    day: MonthlyDayData,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val isEmpty = day.transactions.isEmpty()
+    val isCreditOnly = day.spent == 0.0 && day.credited > 0.0
+
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isEmpty) MaterialTheme.colorScheme.surface else Color(0xFFF0FDF4)
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (isEmpty) CardBorder else SuccessGreen.copy(alpha = 0.5f)
+        ),
+        modifier = modifier.clickable(onClick = onClick)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text(
+                text = day.dayLabel,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = TextSecondary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "SPENT",
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 8.sp,
+                color = TextSecondary,
+                letterSpacing = 0.5.sp
+            )
+            Text(
+                text = "₹${String.format("%.0f", day.spent)}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = if (isEmpty || isCreditOnly) TextPrimary else SuccessGreen
+            )
+            Text(
+                text = "+₹${String.format("%.0f", day.credited)} credited",
+                style = MaterialTheme.typography.labelSmall,
+                color = SuccessGreen,
+                fontSize = 10.sp
+            )
+            Text(
+                text = "${day.transactions.size} transactions",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextSecondary,
+                fontSize = 10.sp
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = if (isEmpty) Color(0xFFF3F4F6) else Color(0xFFDCFCE7),
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            ) {
+                Text(
+                    text = if (isEmpty) "No Transactions" else if (isCreditOnly) "Credits Recorded 💰" else "Transactions Logged 🌿",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isEmpty) TextSecondary else SuccessGreen,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    fontSize = 10.sp
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Tap to view transactions",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = PrimaryColor,
+                fontSize = 10.sp,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
         }
     }
 }

@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -110,32 +111,32 @@ fun ExpenseTrackerApp(viewModel: MainViewModel = viewModel()) {
                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant
             ) {
                 NavigationBarItem(
-                    icon = { Icon(Icons.Outlined.AccountBalanceWallet, "Home") },
-                    label = { Text("Home") },
+                    icon = { Icon(Icons.Outlined.AccountBalanceWallet, "Home", Modifier.size(24.dp)) },
+                    label = { BottomNavigationLabel("Home") },
                     selected = currentRoute == "home",
                     onClick = { navController.navigate("home") { launchSingleTop = true; popUpTo("home") } }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Outlined.Explore, "Radar") },
-                    label = { Text("Spend Radar") },
+                    icon = { Icon(Icons.Outlined.Explore, "Radar", Modifier.size(24.dp)) },
+                    label = { BottomNavigationLabel("Spend Radar") },
                     selected = currentRoute == "radar",
                     onClick = { navController.navigate("radar") { launchSingleTop = true } }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Outlined.Sms, "SMS Sync") },
-                    label = { Text("SMS Sync") },
+                    icon = { Icon(Icons.Outlined.Sms, "SMS Sync", Modifier.size(24.dp)) },
+                    label = { BottomNavigationLabel("SMS Sync") },
                     selected = currentRoute == "sync",
                     onClick = { navController.navigate("sync") { launchSingleTop = true } }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Outlined.FavoriteBorder, "Planner") },
-                    label = { Text("Planner") },
+                    icon = { Icon(Icons.Outlined.FavoriteBorder, "Planner", Modifier.size(24.dp)) },
+                    label = { BottomNavigationLabel("Planner") },
                     selected = currentRoute == "planner",
                     onClick = { navController.navigate("planner") { launchSingleTop = true } }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Outlined.Settings, "Settings") },
-                    label = { Text("Settings") },
+                    icon = { Icon(Icons.Outlined.Settings, "Settings", Modifier.size(24.dp)) },
+                    label = { BottomNavigationLabel("Settings") },
                     selected = currentRoute == "settings",
                     onClick = { navController.navigate("settings") { launchSingleTop = true } }
                 )
@@ -226,6 +227,16 @@ fun ExpenseTrackerApp(viewModel: MainViewModel = viewModel()) {
             }
         }
     }
+}
+
+@Composable
+private fun BottomNavigationLabel(text: String) {
+    Text(
+        text = text,
+        maxLines = 1,
+        fontSize = 10.sp,
+        textAlign = TextAlign.Center
+    )
 }
 
 
