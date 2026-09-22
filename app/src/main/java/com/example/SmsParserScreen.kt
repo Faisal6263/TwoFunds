@@ -75,11 +75,13 @@ fun SmsParserScreen(viewModel: MainViewModel) {
 
     val parsedData = remember(expenses) {
         val parsedExpenses = expenses.filter { it.originalSms.isNotBlank() && !it.originalSms.startsWith("manual-") }
-        val totalAmount = parsedExpenses.sumOf { it.amount }
-        Pair(parsedExpenses, totalAmount)
+        val totalSpent = parsedExpenses.filter { it.isDebit }.sumOf { it.amount }
+        val totalCredited = parsedExpenses.filter { it.isCredit }.sumOf { it.amount }
+        Triple(parsedExpenses, totalSpent, totalCredited)
     }
     val parsedExpenses = parsedData.first
-    val totalAmount = parsedData.second
+    val totalSpent = parsedData.second
+    val totalCredited = parsedData.third
     val filteredExpenses = remember(parsedExpenses, searchQuery, periodFilter, sortOption) {
         val periodExpenses = parsedExpenses.filterByPeriod(periodFilter)
         val searchedExpenses = if (searchQuery.isBlank()) {
@@ -104,7 +106,7 @@ fun SmsParserScreen(viewModel: MainViewModel) {
     ) {
 
         Text("SMS Dashboard", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onBackground)
-        Text("Total expenses read from SMS: ${parsedExpenses.size} (₹${String.format("%.0f", totalAmount)})", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+        Text("${parsedExpenses.size} SMS transactions • Spent ₹${String.format("%.0f", totalSpent)} • Credited ₹${String.format("%.0f", totalCredited)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
         
         Spacer(modifier = Modifier.height(16.dp))
         

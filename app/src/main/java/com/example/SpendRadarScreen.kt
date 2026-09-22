@@ -32,6 +32,7 @@ private class RadarData(
     val actualDailyLimit: Double,
     val todayExpenses: List<Expense>,
     val todayTotal: Double,
+    val todayCredited: Double,
     val remaining: Double,
     val progress: Float,
     val todayDateStr: String
@@ -56,16 +57,18 @@ fun SpendRadarScreen(
         val todayExpenses = budgetSummary.todayExpenses.filter {
             viewProfile == null || it.spentBy == viewProfile?.displayName
         }
-        val todayTotal = todayExpenses.sumOf { it.amount }
+        val todayTotal = todayExpenses.filter { it.isDebit }.sumOf { it.amount }
+        val todayCredited = todayExpenses.filter { it.isCredit }.sumOf { it.amount }
         val remaining = (actualDailyLimit - todayTotal).coerceAtLeast(0.0)
         val progress = if (actualDailyLimit > 0) (todayTotal / actualDailyLimit).toFloat().coerceIn(0f, 1f) else 0f
         
-        RadarData(actualDailyLimit, todayExpenses, todayTotal, remaining, progress, budgetSummary.todayDateLabel)
+        RadarData(actualDailyLimit, todayExpenses, todayTotal, todayCredited, remaining, progress, budgetSummary.todayDateLabel)
     }
 
     val actualDailyLimit = radarData.actualDailyLimit
     val todayExpenses = radarData.todayExpenses
     val todayTotal = radarData.todayTotal
+    val todayCredited = radarData.todayCredited
     val remaining = radarData.remaining
     val progress = radarData.progress
     val todayDateStr = radarData.todayDateStr
@@ -310,6 +313,12 @@ fun SpendRadarScreen(
                         
                         Text("CURRENT SPENT TODAY", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = TextSecondary, letterSpacing = 1.sp)
                         Text("₹${String.format("%.0f", todayTotal)}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = TextSecondary)
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text("CREDITED TODAY", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = TextSecondary, letterSpacing = 1.sp)
+                        Text("+₹${String.format("%.0f", todayCredited)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = SuccessGreen)
+                        Text("Net ${if (todayCredited - todayTotal >= 0) "+" else "-"}₹${String.format("%.0f", kotlin.math.abs(todayCredited - todayTotal))}", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                         
                         Spacer(modifier = Modifier.height(16.dp))
                         
@@ -344,7 +353,7 @@ fun SpendRadarScreen(
                         Column {
                             Text("TODAY'S SMS TRACKING\nWINDOW", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black, color = TextPrimary)
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text("Dynamic source receipts currently\nimpacting Today's Spend Radar logic", style = MaterialTheme.typography.bodySmall, color = TextSecondary, lineHeight = 16.sp)
+                            Text("Debit and credit receipts recorded today", style = MaterialTheme.typography.bodySmall, color = TextSecondary, lineHeight = 16.sp)
                         }
                     }
                     Surface(shape = RoundedCornerShape(16.dp), color = PrimaryContainerColor, border = BorderStroke(1.dp, PrimaryColor)) {
@@ -363,7 +372,7 @@ fun SpendRadarScreen(
                 
                 if (todayExpenses.isEmpty()) {
                     Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                        Text("No expenses logged today.", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+                        Text("No transactions logged today.", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
                     }
                 }
             }

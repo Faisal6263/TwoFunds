@@ -16,8 +16,17 @@ data class Expense(
     val category: String,
     val dateInMillis: Long,
     val originalSms: String,
-    val spentBy: String = SpenderProfile.HUSBAND.displayName
+    val spentBy: String = SpenderProfile.HUSBAND.displayName,
+    val transactionType: String = TransactionType.DEBIT.name
 )
+
+val Expense.isCredit: Boolean get() = transactionType == TransactionType.CREDIT.name
+val Expense.isDebit: Boolean get() = !isCredit
+
+enum class TransactionType {
+    DEBIT,
+    CREDIT
+}
 
 enum class SpenderProfile(val displayName: String, val emoji: String) {
     HUSBAND("Husband", "👨"),

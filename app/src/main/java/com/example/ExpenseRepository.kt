@@ -19,7 +19,8 @@ class ExpenseRepository(private val expenseDao: ExpenseDao) {
             val timeDiff = Math.abs(newExpense.dateInMillis - old.dateInMillis)
             if (timeDiff < 300000 && 
                 newExpense.amount == old.amount && 
-                newExpense.merchant.equals(old.merchant, ignoreCase = true)
+                newExpense.merchant.equals(old.merchant, ignoreCase = true) &&
+                newExpense.transactionType == old.transactionType
             ) {
                 return true
             }
@@ -38,7 +39,9 @@ class ExpenseRepository(private val expenseDao: ExpenseDao) {
                 if (cleanNewSms == cleanOldSms) return@any true
             }
             val timeDiff = Math.abs(expense.dateInMillis - old.dateInMillis)
-            timeDiff < 300000 && expense.amount == old.amount && expense.merchant.equals(old.merchant, ignoreCase = true)
+            timeDiff < 300000 && expense.amount == old.amount &&
+                expense.merchant.equals(old.merchant, ignoreCase = true) &&
+                expense.transactionType == old.transactionType
         }
         if (!hasDuplicate) {
             expenseDao.insertExpense(expense)
@@ -76,7 +79,7 @@ class ExpenseRepository(private val expenseDao: ExpenseDao) {
                 if (sameAmountList != null) {
                     for (old in sameAmountList) {
                         val timeDiff = Math.abs(expense.dateInMillis - old.dateInMillis)
-                        if (timeDiff < 300000 && expense.merchant.equals(old.merchant, ignoreCase = true)) {
+                        if (timeDiff < 300000 && expense.merchant.equals(old.merchant, ignoreCase = true) && expense.transactionType == old.transactionType) {
                             isDup = true
                             break
                         }

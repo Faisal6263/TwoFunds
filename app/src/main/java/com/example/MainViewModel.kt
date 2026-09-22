@@ -149,7 +149,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 val insertedCount = if (expenses.isNotEmpty()) repository.insertAll(expenses) else 0
 
-                _syncMessage.value = "Local sync complete. Added $insertedCount new expenses."
+                _syncMessage.value = "Local sync complete. Added $insertedCount new transactions."
             } catch (e: Exception) {
                 e.printStackTrace()
                 _syncMessage.value = "Error during sync: ${e.message}"

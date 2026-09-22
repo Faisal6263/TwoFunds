@@ -48,6 +48,7 @@ fun MonthlyTransactionsScreen(budgetSummary: BudgetSummary, navController: NavCo
     }
     
     val totalSpent = budgetSummary.monthlyTotal
+    val totalCredited = budgetSummary.monthlyCreditTotal
     val husbandTotal = budgetSummary.monthlyProfileTotals[SpenderProfile.HUSBAND] ?: 0.0
     val wifeTotal = budgetSummary.monthlyProfileTotals[SpenderProfile.WIFE] ?: 0.0
     val sharedTotal = budgetSummary.monthlyProfileTotals[SpenderProfile.SHARED] ?: 0.0
@@ -120,6 +121,17 @@ fun MonthlyTransactionsScreen(budgetSummary: BudgetSummary, navController: NavCo
                             color = Color.White
                         )
                         Spacer(modifier = Modifier.height(12.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column {
+                                Text("CREDITED", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.7f))
+                                Text("+₹${String.format("%,.0f", totalCredited)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFFBBF7D0))
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("NET CASH FLOW", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.7f))
+                                Text("${if (budgetSummary.monthlyNet >= 0) "+" else "-"}₹${String.format("%,.0f", kotlin.math.abs(budgetSummary.monthlyNet))}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = "Based on ${monthlyExpenses.size} parsed financial receipts & live updates",
                             style = MaterialTheme.typography.bodySmall,
@@ -171,8 +183,8 @@ fun MonthlyTransactionsScreen(budgetSummary: BudgetSummary, navController: NavCo
             }
             
             // Category Breakdown Panel
-            if (monthlyExpenses.isNotEmpty() && searchQuery.isEmpty()) {
-                val byCategory = monthlyExpenses.groupBy { it.category }
+            if (monthlyExpenses.any { it.isDebit } && searchQuery.isEmpty()) {
+                val byCategory = monthlyExpenses.filter { it.isDebit }.groupBy { it.category }
                     .mapValues { it.value.sumOf { exp -> exp.amount } }
                     .entries.sortedByDescending { it.value }
                 

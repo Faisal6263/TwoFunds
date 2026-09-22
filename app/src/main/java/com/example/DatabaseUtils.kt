@@ -32,6 +32,17 @@ private val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
+private val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE expenses ADD COLUMN transactionType TEXT NOT NULL DEFAULT 'DEBIT'")
+        db.execSQL("ALTER TABLE deleted_transactions ADD COLUMN transactionType TEXT NOT NULL DEFAULT 'DEBIT'")
+        db.execSQL("DROP INDEX IF EXISTS index_deleted_transactions_merchantKey_amountCents_dayBucket_minuteBucket")
+        db.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS index_deleted_transactions_merchantKey_amountCents_dayBucket_minuteBucket_transactionType ON deleted_transactions (merchantKey, amountCents, dayBucket, minuteBucket, transactionType)"
+        )
+    }
+}
+
 object DefaultDatabase {
     @Volatile
     private var INSTANCE: AppDatabase? = null
@@ -45,6 +56,7 @@ object DefaultDatabase {
             )
             .addMigrations(MIGRATION_2_3)
             .addMigrations(MIGRATION_3_4)
+            .addMigrations(MIGRATION_4_5)
             .fallbackToDestructiveMigration()
             .build()
             INSTANCE = instance
@@ -136,17 +148,23 @@ fun parseMerchantFromText(sender: String, body: String): String {
 fun looksLikeFinancialSms(sender: String, body: String): Boolean {
     val text = body.lowercase()
     val senderText = sender.lowercase()
-    val hasMoneyToken = Regex("(?i)(?:rs\\.?|inr|\\u20B9)\\s*[0-9]").containsMatchIn(body)
+    val hasMoneyToken = Regex("(?i)(?:rs\\.?|inr|\\u20B9)\\s*[0-9]").containsMatchIn(body) ||
+        Regex("(?i)(?:credited|received|deposited|deposit|refund|cashback|salary)\\D{0,20}[0-9]").containsMatchIn(body)
     val senderLooksFinancial = listOf("bank", "bk", "hdfc", "sbi", "icici", "axis", "kotak", "upi", "paytm", "gpay", "phonepe")
         .any { senderText.contains(it) }
-    val textLooksFinancial = listOf("debited", "paid", "spent", "txn", "transaction", "a/c", "acct", "upi", "card")
+    val textLooksFinancial = listOf(
+        "debited", "paid", "spent", "credited", "received", "deposited", "refund", "cashback",
+        "salary", "interest", "txn", "transaction", "a/c", "acct", "upi", "card"
+    )
         .any { text.contains(it) }
 
     return hasMoneyToken && (senderLooksFinancial || textLooksFinancial)
 }
 
 fun parseExpenseFromSms(sender: String, body: String, dateInMillis: Long): Expense? {
-    if (!looksLikeFinancialSms(sender, body) || !isExpenseDebit(body)) return null
+    if (!looksLikeFinancialSms(sender, body)) return null
+
+    val transactionType = detectTransactionType(body) ?: return null
 
     val amount = extractExpenseAmount(body) ?: return null
     val merchant = parseMerchantFromText(sender, body)
@@ -155,10 +173,31 @@ fun parseExpenseFromSms(sender: String, body: String, dateInMillis: Long): Expen
         amount = amount,
         currency = inferCurrency(body),
         merchant = merchant,
-        category = inferCategory(merchant, body),
+        category = if (transactionType == TransactionType.CREDIT) inferCreditCategory(body) else inferCategory(merchant, body),
         dateInMillis = dateInMillis,
-        originalSms = body
+        originalSms = body,
+        transactionType = transactionType.name
     )
+}
+
+private fun detectTransactionType(body: String): TransactionType? {
+    val text = body.lowercase()
+    val debitKeywords = listOf(
+        "debited", "debit", "spent", "paid", "sent", "transferred", "withdrawn",
+        "deducted", "purchase", "payment of", "txn of", "transaction of", "charged"
+    )
+    val creditKeywords = listOf(
+        "credited", "credit to", "received", "deposited", "deposit", "refund", "cashback",
+        "reversal", "reversed", "salary", "interest credit"
+    )
+    val hasDebit = debitKeywords.any { text.contains(it) } || Regex("(?i)\\bdr\\b").containsMatchIn(body)
+    val hasCredit = creditKeywords.any { text.contains(it) } || Regex("(?i)\\bcr\\b").containsMatchIn(body)
+
+    return when {
+        hasCredit && !hasDebit -> TransactionType.CREDIT
+        hasDebit -> TransactionType.DEBIT
+        else -> null
+    }
 }
 
 private fun isExpenseDebit(body: String): Boolean {
@@ -191,7 +230,7 @@ private fun extractExpenseAmount(body: String): Double? {
     val amountPatterns = listOf(
         Regex("(?i)(?:rs\\.?|inr|\\u20B9)\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)"),
         Regex("(?i)([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*(?:rs\\.?|inr)"),
-        Regex("(?i)(?:amount|amt|payment|txn|transaction|purchase|debited)\\s*(?:of|by|for|is|:)?\\s*(?:rs\\.?|inr|\\u20B9)?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")
+        Regex("(?i)(?:amount|amt|payment|txn|transaction|purchase|debited|credited|received|deposited|deposit|refund|cashback|salary)\\s*(?:of|by|for|with|is|:)?\\s*(?:rs\\.?|inr|\\u20B9)?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")
     )
 
     val candidates = amountPatterns.flatMap { regex ->
@@ -215,6 +254,9 @@ private fun scoreAmountCandidate(body: String, index: Int): Int {
     var score = 0
 
     if (listOf("debited", "debit", "spent", "paid", "payment", "txn", "transaction", "purchase", "withdrawn").any { window.contains(it) }) {
+        score += 10
+    }
+    if (listOf("credited", "received", "deposited", "refund", "cashback", "salary", "interest").any { window.contains(it) }) {
         score += 10
     }
     if (listOf("balance", "available", "avl", "limit", "due", "outstanding").any { window.contains(it) }) {
@@ -243,6 +285,17 @@ private fun inferCategory(merchant: String, body: String): String {
         listOf("netflix", "prime", "hotstar", "movie", "cinema", "entertainment", "spotify").any { text.contains(it) } -> "Entertainment"
         listOf("ride", "cab", "taxi").any { text.contains(it) } -> "Rides"
         else -> "Other"
+    }
+}
+
+private fun inferCreditCategory(body: String): String {
+    val text = body.lowercase()
+    return when {
+        text.contains("salary") || text.contains("payroll") -> "Salary"
+        text.contains("refund") || text.contains("reversal") || text.contains("reversed") -> "Refund"
+        text.contains("cashback") -> "Cashback"
+        text.contains("interest") -> "Interest"
+        else -> "Income"
     }
 }
 

@@ -19,12 +19,26 @@ class SmsParserUnitTest {
     }
 
     @Test
-    fun ignoresCreditSms() {
+    fun parsesCreditSms() {
         val sms = "Rs.1000.00 has been credited to your A/c XX1234. Avl bal Rs.15000."
 
         val expense = parseExpenseFromSms("VK-SBIBK", sms, 1000L)
 
-        assertNull(expense)
+        assertNotNull(expense)
+        assertEquals(1000.0, expense!!.amount, 0.01)
+        assertEquals(TransactionType.CREDIT.name, expense.transactionType)
+    }
+
+    @Test
+    fun parsesSalaryCreditWithoutCurrencyPrefix() {
+        val sms = "Your salary was credited 45,000.00 to A/c XX1234. Avl bal 52,000.00."
+
+        val expense = parseExpenseFromSms("VK-SBIBK", sms, 1000L)
+
+        assertNotNull(expense)
+        assertEquals(45000.0, expense!!.amount, 0.01)
+        assertEquals("Salary", expense.category)
+        assertEquals(TransactionType.CREDIT.name, expense.transactionType)
     }
 
     @Test

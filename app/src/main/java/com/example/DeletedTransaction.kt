@@ -12,7 +12,7 @@ import kotlin.math.roundToLong
     tableName = "deleted_transactions",
     indices = [
         Index(
-            value = ["merchantKey", "amountCents", "dayBucket", "minuteBucket"],
+            value = ["merchantKey", "amountCents", "dayBucket", "minuteBucket", "transactionType"],
             unique = true
         )
     ]
@@ -24,6 +24,7 @@ data class DeletedTransaction(
     val dayBucket: Long,
     val minuteBucket: Long,
     val smsFingerprint: String,
+    val transactionType: String,
     val deletedAtMillis: Long
 )
 
@@ -34,6 +35,7 @@ fun Expense.toDeletedTransaction(deletedAtMillis: Long = System.currentTimeMilli
         dayBucket = dateInMillis.toDayBucket(),
         minuteBucket = dateInMillis.toMinuteBucket(),
         smsFingerprint = originalSms.toSmsFingerprint().orEmpty(),
+        transactionType = transactionType,
         deletedAtMillis = deletedAtMillis
     )
 
@@ -53,6 +55,7 @@ fun List<DeletedTransaction>.matchesDeletedTransaction(expense: Expense): Boolea
             deleted.merchantKey == merchantKey &&
                 deleted.amountCents == amountCents &&
                 deleted.dayBucket == dayBucket &&
+                deleted.transactionType == expense.transactionType &&
                 abs(deleted.minuteBucket - minuteBucket) <= 10
 
         sameSms || sameTransactionIdentity

@@ -58,15 +58,37 @@ fun HomeScreen(
         var merchant by remember { mutableStateOf("") }
         var amountStr by remember { mutableStateOf("") }
         var category by remember { mutableStateOf("Food") }
-        val categories = listOf("Food", "Transport", "Groceries", "Utilities", "Shopping", "Health", "Entertainment", "Other")
+        var transactionType by remember { mutableStateOf(TransactionType.DEBIT) }
+        val categories = if (transactionType == TransactionType.CREDIT) {
+            listOf("Income", "Salary", "Refund", "Cashback", "Interest", "Transfer", "Other")
+        } else {
+            listOf("Food", "Transport", "Groceries", "Utilities", "Shopping", "Health", "Entertainment", "Other")
+        }
         val amount = amountStr.toDoubleOrNull()
         val canSave = merchant.isNotBlank() && amount != null && amount > 0
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
-            title = { Text("Add Expense") },
+            title = { Text("Add Transaction") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = merchant, onValueChange = { merchant = it }, label = { Text("Merchant") }, singleLine = true)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TransactionType.entries.forEach { type ->
+                            FilterChip(
+                                selected = transactionType == type,
+                                onClick = {
+                                    transactionType = type
+                                    category = if (type == TransactionType.CREDIT) "Income" else "Food"
+                                },
+                                label = { Text(if (type == TransactionType.DEBIT) "Money spent" else "Money credited") }
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = merchant,
+                        onValueChange = { merchant = it },
+                        label = { Text(if (transactionType == TransactionType.CREDIT) "Source / sender" else "Merchant") },
+                        singleLine = true
+                    )
                     OutlinedTextField(
                         value = amountStr,
                         onValueChange = { amountStr = it.filter { char -> char.isDigit() || char == '.' } },
@@ -96,7 +118,7 @@ fun HomeScreen(
                 Button(enabled = canSave, onClick = {
                     val parsedAmount = amount ?: return@Button
                     if (merchant.isNotBlank() && parsedAmount > 0) {
-                        onAddExpense(Expense(amount = parsedAmount, currency = "INR", merchant = merchant.trim(), category = category, dateInMillis = System.currentTimeMillis(), originalSms = "manual-" + java.util.UUID.randomUUID().toString()))
+                        onAddExpense(Expense(amount = parsedAmount, currency = "INR", merchant = merchant.trim(), category = category, dateInMillis = System.currentTimeMillis(), originalSms = "manual-" + java.util.UUID.randomUUID().toString(), transactionType = transactionType.name))
                         showAddDialog = false
                     }
                 }) { Text("Add") }
@@ -157,8 +179,8 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Who is spending right now? ✨", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        Text("New manual and SMS expenses will be tagged to this profile.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                        Text("Who is using this account? ✨", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text("New manual and SMS transactions will be tagged to this profile.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                     }
                     Text(currentSpender.emoji, fontSize = 24.sp)
                 }
@@ -209,6 +231,41 @@ fun HomeScreen(
                 onClick = { navController.navigate("radar") }
             )
         }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            BudgetWindowCard(
+                title = "Credited Today",
+                amount = budgetSummary.todayCreditTotal,
+                helper = "Net ₹${String.format("%,.0f", budgetSummary.todayNet)}",
+                icon = Icons.Outlined.AccountBalanceWallet,
+                tint = SuccessGreen,
+                modifier = Modifier.weight(1f),
+                onClick = { navController.navigate("radar") }
+            )
+            BudgetWindowCard(
+                title = "Credited Weekly",
+                amount = budgetSummary.weekCreditTotal,
+                helper = "Net ₹${String.format("%,.0f", budgetSummary.weekNet)}",
+                icon = Icons.Outlined.AccountBalanceWallet,
+                tint = SuccessGreen,
+                modifier = Modifier.weight(1f),
+                onClick = { navController.navigate("weekly_dashboard") }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        BudgetWindowCard(
+            title = "Credited This Month",
+            amount = budgetSummary.monthlyCreditTotal,
+            helper = "Net ₹${String.format("%,.0f", budgetSummary.monthlyNet)} • ${budgetSummary.monthName}",
+            icon = Icons.Outlined.CalendarMonth,
+            tint = SuccessGreen,
+            modifier = Modifier.fillMaxWidth(),
+            onClick = { navController.navigate("monthly_spend") }
+        )
 
         Spacer(modifier = Modifier.height(12.dp))
 
@@ -276,7 +333,7 @@ fun HomeScreen(
         // 4. Action Buttons
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             ActionButton("Ride Planner", Icons.Outlined.TwoWheeler, PrimaryColor, Modifier.weight(1f)) { navController.navigate("planner") }
-            ActionButton("Add Expense", Icons.Default.Add, SuccessGreen, Modifier.weight(1f)) { showAddDialog = true }
+            ActionButton("Add Transaction", Icons.Default.Add, SuccessGreen, Modifier.weight(1f)) { showAddDialog = true }
         }
         Spacer(modifier = Modifier.height(12.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {

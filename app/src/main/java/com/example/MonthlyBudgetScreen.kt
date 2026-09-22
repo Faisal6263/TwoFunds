@@ -84,7 +84,7 @@ fun MonthlyBudgetScreen(
 
     val monthlyExpenses = budgetSummary.monthlyExpenses
     val spentByCategory = remember(monthlyExpenses) {
-        monthlyExpenses.groupBy { normalizeBudgetCategory(it.category) }
+        monthlyExpenses.filter { it.isDebit }.groupBy { normalizeBudgetCategory(it.category) }
             .mapValues { entry -> entry.value.sumOf { it.amount } }
     }
     val totalSpent = budgetSummary.monthlyTotal

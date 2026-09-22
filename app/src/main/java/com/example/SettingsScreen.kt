@@ -113,7 +113,7 @@ fun SettingsScreen(
                     Text("Budget profile ⚙️", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
 
-                Text("Default spender for new expenses", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
+                Text("Default profile for new transactions", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),

@@ -237,7 +237,8 @@ fun AnalyticsScreen(expenses: List<Expense>) {
         Text("Spending Analytics", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(16.dp))
         
-        val totalSpent = expenses.sumOf { it.amount }
+        val totalSpent = expenses.filter { it.isDebit }.sumOf { it.amount }
+        val totalCredited = expenses.filter { it.isCredit }.sumOf { it.amount }
         Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -246,10 +247,11 @@ fun AnalyticsScreen(expenses: List<Expense>) {
             Column(modifier = Modifier.padding(24.dp)) {
                 Text("Total Processed", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("₹${String.format("%.2f", totalSpent)}", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text("Credited: ₹${String.format("%.2f", totalCredited)} • Net: ₹${String.format("%.2f", totalCredited - totalSpent)}", style = MaterialTheme.typography.bodyMedium, color = SuccessGreen)
             }
         }
 
-        val byCategory = expenses.groupBy { it.category }.mapValues { it.value.sumOf { exp -> exp.amount } }.entries.sortedByDescending { it.value }
+        val byCategory = expenses.filter { it.isDebit }.groupBy { it.category }.mapValues { it.value.sumOf { exp -> exp.amount } }.entries.sortedByDescending { it.value }
         if (byCategory.isNotEmpty()) {
             Text("Top Categories", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(12.dp))
@@ -344,5 +346,6 @@ fun getCategoryIcon(category: String) = when (category.lowercase(Locale.ROOT)) {
     "health" -> Icons.Filled.Favorite
     "transport" -> Icons.Filled.DirectionsCar
     "utilities" -> Icons.Filled.Bolt
+    "salary", "income", "refund", "cashback", "interest", "transfer" -> Icons.Filled.AccountBalanceWallet
     else -> Icons.Filled.Warning
 }

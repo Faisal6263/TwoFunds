@@ -75,6 +75,7 @@ fun WeeklyDashboardScreen(
             DaySpentData(
                 dayName = dayPair.second,
                 spent = budgetSummary.dailySpentByCalendarDay[dayPair.first] ?: 0.0,
+                credited = dayExpenses.filter { it.isCredit }.sumOf { it.amount },
                 expenses = dayExpenses.sortedByDescending { it.dateInMillis }
             )
         }
@@ -169,6 +170,19 @@ fun WeeklyDashboardScreen(
                                 color = TextSecondary
                             )
                         }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column {
+                        Text("CREDITED THIS WEEK", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                        Text("+₹${String.format("%,.0f", budgetSummary.weekCreditTotal)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = SuccessGreen)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("NET CASH FLOW", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                        Text("${if (budgetSummary.weekNet >= 0) "+" else "-"}₹${String.format("%,.0f", kotlin.math.abs(budgetSummary.weekNet))}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (budgetSummary.weekNet >= 0) SuccessGreen else ErrorRed)
                     }
                 }
 
@@ -282,18 +296,19 @@ fun WeeklyDashboardScreen(
             ) {
                 rowDays.forEach { dayData ->
                     val isOver = dayData.spent > dailyAllocation
-                    val isZero = dayData.spent == 0.0
+                    val isEmpty = dayData.expenses.isEmpty()
+                    val isCreditOnly = dayData.spent == 0.0 && dayData.credited > 0.0
 
                     Card(
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = if (isZero) MaterialTheme.colorScheme.surface
+                            containerColor = if (isEmpty) MaterialTheme.colorScheme.surface
                             else if (isOver) Color(0xFFFEF2F2)
                             else Color(0xFFF0FDF4)
                         ),
                         border = BorderStroke(
                             width = 1.dp,
-                            color = if (isZero) CardBorder
+                            color = if (isEmpty) CardBorder
                             else if (isOver) ErrorRed.copy(alpha = 0.5f)
                             else SuccessGreen.copy(alpha = 0.5f)
                         ),
@@ -327,9 +342,15 @@ fun WeeklyDashboardScreen(
                                         text = "₹${String.format("%.0f", dayData.spent)}",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.ExtraBold,
-                                        color = if (isZero) TextPrimary
+                                        color = if (isEmpty || isCreditOnly) TextPrimary
                                         else if (isOver) ErrorRed
                                         else SuccessGreen
+                                    )
+                                    Text(
+                                        text = "+₹${String.format("%.0f", dayData.credited)} credited",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = SuccessGreen,
+                                        fontSize = 10.sp
                                     )
                                     Text(
                                         text = "${dayData.expenses.size} transactions",
@@ -361,18 +382,19 @@ fun WeeklyDashboardScreen(
                             // Status text badge
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
-                                color = if (isZero) Color(0xFFF3F4F6)
+                                color = if (isEmpty) Color(0xFFF3F4F6)
                                 else if (isOver) Color(0xFFFEE2E2)
                                 else Color(0xFFDCFCE7),
                                 modifier = Modifier.align(Alignment.CenterHorizontally)
                             ) {
                                 Text(
-                                    text = if (isZero) "No Expenses"
+                                    text = if (isEmpty) "No Transactions"
+                                    else if (isCreditOnly) "Credits Recorded 💰"
                                     else if (isOver) "Limit Exceeded ⚠️"
                                     else "Under Limit 🌿",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isZero) TextSecondary
+                                    color = if (isEmpty) TextSecondary
                                     else if (isOver) ErrorRed
                                     else SuccessGreen,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -411,7 +433,7 @@ fun WeeklyDashboardScreen(
                             color = TextPrimary
                         )
                         Text(
-                            text = "${day.expenses.size} transactions - Rs.${String.format("%,.0f", day.spent)} spent",
+                            text = "${day.expenses.size} transactions • Rs.${String.format("%,.0f", day.spent)} spent • Rs.${String.format("%,.0f", day.credited)} credited",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
@@ -515,5 +537,6 @@ fun WeeklyDashboardScreen(
 data class DaySpentData(
     val dayName: String,
     val spent: Double,
+    val credited: Double,
     val expenses: List<Expense>
 )

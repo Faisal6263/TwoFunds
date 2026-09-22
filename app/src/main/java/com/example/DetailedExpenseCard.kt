@@ -27,6 +27,11 @@ import java.util.Locale
 
 @Composable
 fun DetailedExpenseCard(expense: Expense, onDelete: (() -> Unit)? = null) {
+    val amountColor = if (expense.isCredit) SuccessGreen else ErrorRed
+    val amountPrefix = if (expense.isCredit) "+" else "-"
+    val typeLabel = if (expense.isCredit) "CREDITED" else "DEBITED"
+    val typeBackground = if (expense.isCredit) Color(0xFFECFDF5) else Color(0xFFFFECEB)
+    val typeBorder = if (expense.isCredit) Color(0xFF86EFAC) else Color(0xFFFCA5A5)
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Box(modifier = Modifier.size(40.dp).clip(CircleShape).background(Color(0xFFF3F4F6)), contentAlignment = Alignment.Center) {
@@ -55,9 +60,14 @@ fun DetailedExpenseCard(expense: Expense, onDelete: (() -> Unit)? = null) {
                     SpenderProfile.SHARED.displayName -> SpenderProfile.SHARED.emoji
                     else -> SpenderProfile.HUSBAND.emoji
                 }
-                Text("$spenderEmoji SPENT BY: ${expense.spentBy.uppercase()} PROFILE", style = MaterialTheme.typography.labelSmall, color = TextSecondary, letterSpacing = 1.sp)
+                Text(
+                    if (expense.isCredit) "$spenderEmoji RECEIVED BY: ${expense.spentBy.uppercase()} PROFILE" else "$spenderEmoji SPENT BY: ${expense.spentBy.uppercase()} PROFILE",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSecondary,
+                    letterSpacing = 1.sp
+                )
             }
-            Text("-₹${String.format("%.0f", expense.amount)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ErrorRed)
+            Text("$amountPrefix₹${String.format("%.0f", expense.amount)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = amountColor)
             if (onDelete != null) {
                 Spacer(modifier = Modifier.width(12.dp))
                 Icon(
@@ -99,14 +109,14 @@ fun DetailedExpenseCard(expense: Expense, onDelete: (() -> Unit)? = null) {
                     }
                     Surface(
                         shape = RoundedCornerShape(4.dp),
-                        color = Color(0xFFFFECEB),
-                        border = BorderStroke(1.dp, Color(0xFFFCA5A5))
+                        color = typeBackground,
+                        border = BorderStroke(1.dp, typeBorder)
                     ) {
                         Text(
-                            text = "DEBITED",
+                            text = typeLabel,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFFDC2626),
+                            color = amountColor,
                             fontSize = 9.sp,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
@@ -123,12 +133,12 @@ fun DetailedExpenseCard(expense: Expense, onDelete: (() -> Unit)? = null) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Debited Amount", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                        Text(if (expense.isCredit) "Credited Amount" else "Debited Amount", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                         Text(
                             "₹${String.format("%,.2f", expense.amount)}",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Black,
-                            color = Color(0xFFDC2626)
+                            color = amountColor
                         )
                     }
                     
@@ -138,7 +148,7 @@ fun DetailedExpenseCard(expense: Expense, onDelete: (() -> Unit)? = null) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Credited To (Merchant)", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                        Text(if (expense.isCredit) "Received From / Source" else "Paid To (Merchant)", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                         Text(
                             expense.merchant.ifEmpty { "Unknown Merchant" },
                             style = MaterialTheme.typography.bodySmall,
@@ -176,7 +186,10 @@ fun DetailedExpenseCard(expense: Expense, onDelete: (() -> Unit)? = null) {
                 ) {
                     val fallbackDateFormatter = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
                     val fallbackDateText = fallbackDateFormatter.format(Date(expense.dateInMillis))
-                    val rawSmsText = expense.originalSms.ifEmpty { "SBI Card: Spent Rs.${String.format("%.2f", expense.amount)} at ${expense.merchant} on ${fallbackDateText}." }
+                    val rawSmsText = expense.originalSms.ifEmpty {
+                        if (expense.isCredit) "Received Rs.${String.format("%.2f", expense.amount)} from ${expense.merchant} on ${fallbackDateText}."
+                        else "SBI Card: Spent Rs.${String.format("%.2f", expense.amount)} at ${expense.merchant} on ${fallbackDateText}."
+                    }
                     Column {
                         Text(
                             "ORIGINAL MESSAGE RECEIPT:", 
