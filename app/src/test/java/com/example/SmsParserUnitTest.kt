@@ -42,6 +42,18 @@ class SmsParserUnitTest {
     }
 
     @Test
+    fun parsesExactIciciMaskedAccountCreditFormat() {
+        val sms = "Dear Customer, Acct XX070 is credited with Rs 50000.00 on 30-Jun-26 from NUSRAT JAHAN QA."
+
+        val expense = parseExpenseFromSms("AX-ICICIB", sms, 1000L)
+
+        assertNotNull(expense)
+        assertEquals(50000.0, expense!!.amount, 0.01)
+        assertEquals(TransactionType.CREDIT.name, expense.transactionType)
+        assertEquals("AX-ICICIB", expense.sourceSender)
+    }
+
+    @Test
     fun ignoresCreditWithoutTrackedUpi() {
         val sms = "Rs.2000.00 has been credited to UPI someoneelse@ibl. Avl bal Rs.15000."
 
@@ -51,6 +63,13 @@ class SmsParserUnitTest {
     @Test
     fun ignoresGenericCreditWithoutOwnerUpi() {
         val sms = "Rs.2000.00 has been credited to your A/c XX1234. Avl bal Rs.15000."
+
+        assertNull(parseExpenseFromSms("AX-ICICIB", sms, 1000L))
+    }
+
+    @Test
+    fun ignoresCreditToDifferentMaskedAccount() {
+        val sms = "Dear Customer, Acct XX071 is credited with Rs 50000.00 on 30-Jun-26 from NUSRAT JAHAN QA."
 
         assertNull(parseExpenseFromSms("AX-ICICIB", sms, 1000L))
     }

@@ -173,8 +173,8 @@ fun parseExpenseFromSms(sender: String, body: String, dateInMillis: Long): Expen
 
     val transactionType = detectTransactionType(body) ?: return null
 
-    // Only incoming money addressed to the owner's UPI ID belongs in budget reports.
-    // This prevents credits for another account or VPA from inflating the available budget.
+    // Only incoming ICICI money addressed to the owner's UPI ID or masked account
+    // belongs in budget reports. Other accounts and VPAs must not inflate the budget.
     if (transactionType == TransactionType.CREDIT && !isTrackedCreditDestination(sender, body)) return null
 
     val amount = extractExpenseAmount(body) ?: return null

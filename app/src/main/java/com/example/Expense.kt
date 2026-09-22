@@ -26,14 +26,19 @@ val Expense.isDebit: Boolean get() = !isCredit
 
 const val TRACKED_CREDIT_UPI_ID = "Faisal62632@ibl"
 const val TRACKED_CREDIT_BANK = "ICICI"
+const val TRACKED_CREDIT_ACCOUNT = "XX070"
 
 fun String.containsTrackedCreditUpi(): Boolean =
     contains(TRACKED_CREDIT_UPI_ID, ignoreCase = true)
 
+fun String.containsTrackedCreditAccount(): Boolean =
+    Regex("(?i)\\b(?:acct|a/c|account)\\s*(?:no\\.?\\s*)?${Regex.escape(TRACKED_CREDIT_ACCOUNT)}\\b")
+        .containsMatchIn(this)
+
 fun isTrackedCreditDestination(sender: String, body: String): Boolean =
-    body.containsTrackedCreditUpi() &&
-        (sender.contains(TRACKED_CREDIT_BANK, ignoreCase = true) ||
-            body.contains(TRACKED_CREDIT_BANK, ignoreCase = true))
+    (sender.contains(TRACKED_CREDIT_BANK, ignoreCase = true) ||
+        body.contains(TRACKED_CREDIT_BANK, ignoreCase = true)) &&
+        (body.containsTrackedCreditUpi() || body.containsTrackedCreditAccount())
 
 val Expense.isTrackedCredit: Boolean
     get() = isCredit && isTrackedCreditDestination(sourceSender, originalSms)
