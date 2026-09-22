@@ -20,7 +20,7 @@ class SmsParserUnitTest {
 
     @Test
     fun parsesCreditSms() {
-        val sms = "Rs.1000.00 has been credited to your A/c XX1234. Avl bal Rs.15000."
+        val sms = "Rs.1000.00 has been credited to UPI Faisal62632@ibl. Avl bal Rs.15000."
 
         val expense = parseExpenseFromSms("VK-SBIBK", sms, 1000L)
 
@@ -31,7 +31,7 @@ class SmsParserUnitTest {
 
     @Test
     fun parsesSalaryCreditWithoutCurrencyPrefix() {
-        val sms = "Your salary was credited 45,000.00 to A/c XX1234. Avl bal 52,000.00."
+        val sms = "Your salary was credited 45,000.00 to UPI faisal62632@IBL. Avl bal 52,000.00."
 
         val expense = parseExpenseFromSms("VK-SBIBK", sms, 1000L)
 
@@ -39,6 +39,20 @@ class SmsParserUnitTest {
         assertEquals(45000.0, expense!!.amount, 0.01)
         assertEquals("Salary", expense.category)
         assertEquals(TransactionType.CREDIT.name, expense.transactionType)
+    }
+
+    @Test
+    fun ignoresCreditWithoutTrackedUpi() {
+        val sms = "Rs.2000.00 has been credited to UPI someoneelse@ibl. Avl bal Rs.15000."
+
+        assertNull(parseExpenseFromSms("VK-SBIBK", sms, 1000L))
+    }
+
+    @Test
+    fun ignoresGenericCreditWithoutOwnerUpi() {
+        val sms = "Rs.2000.00 has been credited to your A/c XX1234. Avl bal Rs.15000."
+
+        assertNull(parseExpenseFromSms("VK-SBIBK", sms, 1000L))
     }
 
     @Test

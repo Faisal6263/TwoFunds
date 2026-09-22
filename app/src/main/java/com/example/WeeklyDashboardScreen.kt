@@ -48,6 +48,7 @@ fun WeeklyDashboardScreen(
     var selectedDay by remember { mutableStateOf<DaySpentData?>(null) }
 
     val totalWeekSpent = budgetSummary.weekTotal
+    val weekBudgetUsed = (totalWeekSpent - budgetSummary.weekCreditTotal).coerceAtLeast(0.0)
     val progress = budgetSummary.weekProgress
 
     // Days list Monday to Sunday
@@ -203,20 +204,20 @@ fun WeeklyDashboardScreen(
                 ) {
                     Column {
                         Text(
-                            text = "₹${String.format("%,.0f", totalWeekSpent)}",
+                            text = "₹${String.format("%,.0f", weekBudgetUsed)}",
                             style = MaterialTheme.typography.displaySmall,
                             fontWeight = FontWeight.Black,
-                            color = if (totalWeekSpent > weeklyBudget) ErrorRed else SuccessGreen
+                            color = if (weekBudgetUsed > weeklyBudget) ErrorRed else SuccessGreen
                         )
                         Text(
-                            text = "out of target limit ₹${String.format("%,.0f", weeklyBudget)}",
+                            text = "net used of ₹${String.format("%,.0f", weeklyBudget)} • ₹${String.format("%,.0f", totalWeekSpent)} spent",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
                     }
                     
                     val percentLeft = if (weeklyBudget > 0.0) {
-                        ((weeklyBudget - totalWeekSpent) / weeklyBudget * 100).coerceAtLeast(0.0)
+                        (budgetSummary.weekRemaining / weeklyBudget * 100).coerceAtLeast(0.0)
                     } else {
                         0.0
                     }
@@ -244,7 +245,7 @@ fun WeeklyDashboardScreen(
 
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = if (totalWeekSpent <= weeklyBudget) Color(0xFFF0FDF4) else Color(0xFFFEF2F2),
+                    color = if (weekBudgetUsed <= weeklyBudget) Color(0xFFF0FDF4) else Color(0xFFFEF2F2),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -254,18 +255,18 @@ fun WeeklyDashboardScreen(
                         Icon(
                             imageVector = Icons.Outlined.Info,
                             contentDescription = null,
-                            tint = if (totalWeekSpent <= weeklyBudget) SuccessGreen else ErrorRed,
+                            tint = if (weekBudgetUsed <= weeklyBudget) SuccessGreen else ErrorRed,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (totalWeekSpent <= weeklyBudget) {
-                                "Awesome! You are ₹${String.format("%.0f", weeklyBudget - totalWeekSpent)} under your weekly budget."
+                            text = if (weekBudgetUsed <= weeklyBudget) {
+                                "After verified credits, you have ₹${String.format("%.0f", budgetSummary.weekRemaining)} available this week."
                             } else {
-                                "Warning: Weekly target budget exceeded by ₹${String.format("%.0f", totalWeekSpent - weeklyBudget)}."
+                                "Warning: Weekly target budget exceeded by ₹${String.format("%.0f", weekBudgetUsed - weeklyBudget)}."
                             },
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (totalWeekSpent <= weeklyBudget) Color(0xFF166534) else Color(0xFF991B1B),
+                            color = if (weekBudgetUsed <= weeklyBudget) Color(0xFF166534) else Color(0xFF991B1B),
                             fontWeight = FontWeight.Medium
                         )
                     }
@@ -295,7 +296,8 @@ fun WeeklyDashboardScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 rowDays.forEach { dayData ->
-                    val isOver = dayData.spent > dailyAllocation
+                    val dayBudgetUsed = (dayData.spent - dayData.credited).coerceAtLeast(0.0)
+                    val isOver = dayBudgetUsed > dailyAllocation
                     val isEmpty = dayData.expenses.isEmpty()
                     val isCreditOnly = dayData.spent == 0.0 && dayData.credited > 0.0
 

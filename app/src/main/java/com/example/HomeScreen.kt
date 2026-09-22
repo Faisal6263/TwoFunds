@@ -136,7 +136,8 @@ fun HomeScreen(
             Expense(amount = 1800.0, category = "Utility Bills", currency = "₹", merchant = "Electricity Bill Payment", dateInMillis = System.currentTimeMillis(), originalSms = ""),
             Expense(amount = 1200.0, category = "Shopping", currency = "₹", merchant = "Zara Summer Wear", dateInMillis = System.currentTimeMillis(), originalSms = "")
         )
-        val displayExpenses = if (expenses.isNotEmpty()) expenses.take(5) else demoExpenses
+        val reportableExpenses = expenses.filter { it.isDebit || it.isTrackedCredit }
+        val displayExpenses = if (reportableExpenses.isNotEmpty()) reportableExpenses.take(5) else demoExpenses
 
         HomeData(
             todayTotal = budgetSummary.todayTotal,

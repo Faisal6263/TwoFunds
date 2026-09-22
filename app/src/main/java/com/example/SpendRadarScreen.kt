@@ -59,8 +59,9 @@ fun SpendRadarScreen(
         }
         val todayTotal = todayExpenses.filter { it.isDebit }.sumOf { it.amount }
         val todayCredited = todayExpenses.filter { it.isCredit }.sumOf { it.amount }
-        val remaining = (actualDailyLimit - todayTotal).coerceAtLeast(0.0)
-        val progress = if (actualDailyLimit > 0) (todayTotal / actualDailyLimit).toFloat().coerceIn(0f, 1f) else 0f
+        val budgetUsed = (todayTotal - todayCredited).coerceAtLeast(0.0)
+        val remaining = (actualDailyLimit - todayTotal + todayCredited).coerceAtLeast(0.0)
+        val progress = if (actualDailyLimit > 0) (budgetUsed / actualDailyLimit).toFloat().coerceIn(0f, 1f) else 0f
         
         RadarData(actualDailyLimit, todayExpenses, todayTotal, todayCredited, remaining, progress, budgetSummary.todayDateLabel)
     }

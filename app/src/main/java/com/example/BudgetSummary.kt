@@ -45,6 +45,7 @@ fun buildBudgetSummary(
     nowMillis: Long = System.currentTimeMillis()
 ): BudgetSummary {
     val now = Calendar.getInstance().apply { timeInMillis = nowMillis }
+    val reportableExpenses = expenses.filter { it.isDebit || it.isTrackedCredit }
     val activeDailyLimit = when (mode) {
         SpendMode.CUSTOM -> customDailyLimit
         else -> dailyPacingLimit * mode.multiplier
@@ -55,18 +56,20 @@ fun buildBudgetSummary(
         timeInMillis = todayStart
         add(Calendar.DAY_OF_YEAR, 1)
     }.timeInMillis
-    val todayExpenses = expenses.filter { it.dateInMillis in todayStart until tomorrowStart }
+    val todayExpenses = reportableExpenses.filter { it.dateInMillis in todayStart until tomorrowStart }
     val todayTotal = todayExpenses.filter { it.isDebit }.sumOf { it.amount }
     val todayCreditTotal = todayExpenses.filter { it.isCredit }.sumOf { it.amount }
+    val todayBudgetUsed = (todayTotal - todayCreditTotal).coerceAtLeast(0.0)
 
     val monthStart = startOfMonth(now).timeInMillis
     val nextMonthStart = Calendar.getInstance().apply {
         timeInMillis = monthStart
         add(Calendar.MONTH, 1)
     }.timeInMillis
-    val monthlyExpenses = expenses.filter { it.dateInMillis in monthStart until nextMonthStart }
+    val monthlyExpenses = reportableExpenses.filter { it.dateInMillis in monthStart until nextMonthStart }
     val monthlyTotal = monthlyExpenses.filter { it.isDebit }.sumOf { it.amount }
     val monthlyCreditTotal = monthlyExpenses.filter { it.isCredit }.sumOf { it.amount }
+    val monthlyBudgetUsed = (monthlyTotal - monthlyCreditTotal).coerceAtLeast(0.0)
     val monthlyProfileTotals = SpenderProfile.entries.associateWith { profile ->
         monthlyExpenses.filter { it.isDebit && it.spentBy == profile.displayName }.sumOf { it.amount }
     }
@@ -76,9 +79,10 @@ fun buildBudgetSummary(
         timeInMillis = weekStart
         add(Calendar.DAY_OF_YEAR, 7)
     }.timeInMillis
-    val weekExpenses = expenses.filter { it.dateInMillis in weekStart until nextWeekStart }
+    val weekExpenses = reportableExpenses.filter { it.dateInMillis in weekStart until nextWeekStart }
     val weekTotal = weekExpenses.filter { it.isDebit }.sumOf { it.amount }
     val weekCreditTotal = weekExpenses.filter { it.isCredit }.sumOf { it.amount }
+    val weekBudgetUsed = (weekTotal - weekCreditTotal).coerceAtLeast(0.0)
     val dailySpentByCalendarDay = mutableMapOf<Int, Double>().apply {
         put(Calendar.MONDAY, 0.0)
         put(Calendar.TUESDAY, 0.0)
@@ -94,11 +98,23 @@ fun buildBudgetSummary(
         val day = expenseDay.get(Calendar.DAY_OF_WEEK)
         dailySpentByCalendarDay[day] = (dailySpentByCalendarDay[day] ?: 0.0) + expense.amount
     }
+    val dailyCreditedByCalendarDay = weekExpenses.filter { it.isCredit }
+        .groupBy { expense ->
+            expenseDay.timeInMillis = expense.dateInMillis
+            expenseDay.get(Calendar.DAY_OF_WEEK)
+        }
+        .mapValues { (_, credits) -> credits.sumOf { it.amount } }
 
     val todayDay = now.get(Calendar.DAY_OF_WEEK)
     val weekdaySavings = listOf(Calendar.MONDAY, Calendar.TUESDAY, Calendar.WEDNESDAY, Calendar.THURSDAY, Calendar.FRIDAY)
         .filter { hasWeekdayStarted(it, todayDay) }
-        .sumOf { day -> (activeDailyLimit - (dailySpentByCalendarDay[day] ?: 0.0)).coerceAtLeast(0.0) }
+        .sumOf { day ->
+            (
+                activeDailyLimit -
+                    (dailySpentByCalendarDay[day] ?: 0.0) +
+                    (dailyCreditedByCalendarDay[day] ?: 0.0)
+                ).coerceAtLeast(0.0)
+        }
 
     return BudgetSummary(
         activeDailyLimit = activeDailyLimit,
@@ -106,22 +122,22 @@ fun buildBudgetSummary(
         todayTotal = todayTotal,
         todayCreditTotal = todayCreditTotal,
         todayNet = todayCreditTotal - todayTotal,
-        todayRemaining = (activeDailyLimit - todayTotal).coerceAtLeast(0.0),
-        todayProgress = ratio(todayTotal, activeDailyLimit),
+        todayRemaining = (activeDailyLimit - todayTotal + todayCreditTotal).coerceAtLeast(0.0),
+        todayProgress = ratio(todayBudgetUsed, activeDailyLimit),
         monthlyExpenses = monthlyExpenses,
         monthlyTotal = monthlyTotal,
         monthlyCreditTotal = monthlyCreditTotal,
         monthlyNet = monthlyCreditTotal - monthlyTotal,
-        monthlyRemaining = (monthlyBudget - monthlyTotal).coerceAtLeast(0.0),
-        monthlyProgress = ratio(monthlyTotal, monthlyBudget),
+        monthlyRemaining = (monthlyBudget - monthlyTotal + monthlyCreditTotal).coerceAtLeast(0.0),
+        monthlyProgress = ratio(monthlyBudgetUsed, monthlyBudget),
         monthlyProfileTotals = monthlyProfileTotals,
         monthName = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(Date(nowMillis)),
         weekExpenses = weekExpenses,
         weekTotal = weekTotal,
         weekCreditTotal = weekCreditTotal,
         weekNet = weekCreditTotal - weekTotal,
-        weekRemaining = (weeklyBudget - weekTotal).coerceAtLeast(0.0),
-        weekProgress = ratio(weekTotal, weeklyBudget),
+        weekRemaining = (weeklyBudget - weekTotal + weekCreditTotal).coerceAtLeast(0.0),
+        weekProgress = ratio(weekBudgetUsed, weeklyBudget),
         weekDailyAllocation = if (weeklyBudget > 0.0) weeklyBudget / 7.0 else 0.0,
         dailySpentByCalendarDay = dailySpentByCalendarDay,
         weekdaySavings = weekdaySavings,

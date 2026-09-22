@@ -27,7 +27,8 @@ class BudgetSummaryUnitTest {
         val expenses = listOf(
             Expense(amount = 100.0, currency = "INR", merchant = "Cafe", category = "Food", dateInMillis = monday.timeInMillis, originalSms = "monday"),
             Expense(amount = 250.0, currency = "INR", merchant = "Metro", category = "Transport", dateInMillis = today.timeInMillis, originalSms = "today"),
-            Expense(amount = 700.0, currency = "INR", merchant = "Refund", category = "Other", dateInMillis = today.timeInMillis, originalSms = "credit", transactionType = TransactionType.CREDIT.name),
+            Expense(amount = 700.0, currency = "INR", merchant = "Refund", category = "Other", dateInMillis = today.timeInMillis, originalSms = "credited to Faisal62632@ibl", transactionType = TransactionType.CREDIT.name),
+            Expense(amount = 5000.0, currency = "INR", merchant = "Other Credit", category = "Other", dateInMillis = today.timeInMillis, originalSms = "credited to someoneelse@ibl", transactionType = TransactionType.CREDIT.name),
             Expense(amount = 999.0, currency = "INR", merchant = "Old", category = "Other", dateInMillis = previousMonth.timeInMillis, originalSms = "old")
         )
 
@@ -52,6 +53,12 @@ class BudgetSummaryUnitTest {
         assertEquals(450.0, summary.todayNet, 0.01)
         assertEquals(350.0, summary.weekNet, 0.01)
         assertEquals(350.0, summary.monthlyNet, 0.01)
+        assertEquals(950.0, summary.todayRemaining, 0.01)
+        assertEquals(2450.0, summary.weekRemaining, 0.01)
+        assertEquals(5350.0, summary.monthlyRemaining, 0.01)
+        assertEquals(0.0f, summary.todayProgress, 0.001f)
+        assertEquals(0.0f, summary.weekProgress, 0.001f)
+        assertEquals(0.0f, summary.monthlyProgress, 0.001f)
         assertEquals(300.0, summary.weekDailyAllocation, 0.01)
     }
 }

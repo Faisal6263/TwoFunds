@@ -23,6 +23,14 @@ data class Expense(
 val Expense.isCredit: Boolean get() = transactionType == TransactionType.CREDIT.name
 val Expense.isDebit: Boolean get() = !isCredit
 
+const val TRACKED_CREDIT_UPI_ID = "Faisal62632@ibl"
+
+fun String.containsTrackedCreditUpi(): Boolean =
+    contains(TRACKED_CREDIT_UPI_ID, ignoreCase = true)
+
+val Expense.isTrackedCredit: Boolean
+    get() = isCredit && originalSms.containsTrackedCreditUpi()
+
 enum class TransactionType {
     DEBIT,
     CREDIT

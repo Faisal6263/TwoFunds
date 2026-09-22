@@ -88,6 +88,8 @@ fun MonthlyBudgetScreen(
             .mapValues { entry -> entry.value.sumOf { it.amount } }
     }
     val totalSpent = budgetSummary.monthlyTotal
+    val totalCredited = budgetSummary.monthlyCreditTotal
+    val budgetUsed = (totalSpent - totalCredited).coerceAtLeast(0.0)
     val assignedBudget = BudgetCategories.sumOf { categoryBudgets[it] ?: 0.0 }
     val monthName = budgetSummary.monthName
     val monthlyProgress = budgetSummary.monthlyProgress
@@ -129,7 +131,8 @@ fun MonthlyBudgetScreen(
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Column {
                                 Text("MONTHLY PLAN 🧾", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.78f))
-                                Text("₹${String.format("%,.0f", totalSpent)} / ₹${String.format("%,.0f", monthlyBudget)}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = Color.White)
+                                Text("₹${String.format("%,.0f", budgetUsed)} / ₹${String.format("%,.0f", monthlyBudget)}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = Color.White)
+                                Text("₹${String.format("%,.0f", totalSpent)} spent • ₹${String.format("%,.0f", totalCredited)} returned", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.78f))
                             }
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
