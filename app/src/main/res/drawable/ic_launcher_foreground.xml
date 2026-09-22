@@ -1,8 +1,93 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item
-        android:width="66dp"
-        android:height="66dp"
-        android:drawable="@drawable/ic_custom_icon"
-        android:gravity="center" />
-</layer-list>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Soft depth behind the mark. -->
+    <path
+        android:fillColor="#260B163F"
+        android:pathData="M29,43C24.6,43 21,46.6 21,51L21,73C21,78.5 25.5,83 31,83L80,83C84.4,83 88,79.4 88,75L88,57C88,52.6 84.4,49 80,49L33,49C30.8,49 29,47.2 29,45Z" />
+
+    <!-- The two funds: complementary cards entering one wallet. -->
+    <path
+        android:pathData="M31,45L46.6,25.8C48.8,23.1 52.8,22.7 55.5,24.9L68.2,35.2L60.3,45Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="35"
+                android:startY="42"
+                android:endX="61"
+                android:endY="24"
+                android:type="linear">
+                <item android:offset="0" android:color="#FF22D3EE" />
+                <item android:offset="1" android:color="#FF67E8F9" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path
+        android:fillColor="#66FFFFFF"
+        android:pathData="M42.8,38.6L50,29.7C50.6,29 51.6,28.9 52.3,29.5L54.4,31.2L47.5,39.8Z" />
+    <path
+        android:pathData="M46,45L59.6,28.2C61.8,25.5 65.8,25.1 68.5,27.3L81.5,37.8L75.7,45Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="50"
+                android:startY="44"
+                android:endX="73"
+                android:endY="28"
+                android:type="linear">
+                <item android:offset="0" android:color="#FFF59E0B" />
+                <item android:offset="1" android:color="#FFFDE68A" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path
+        android:fillColor="#55FFFFFF"
+        android:pathData="M59.1,38.6L63.8,32.8C64.4,32.1 65.4,32 66.1,32.6L70,35.7L67.7,38.6Z" />
+
+    <!-- Clean wallet silhouette. -->
+    <path
+        android:pathData="M29,41L76,41C82.6,41 88,46.4 88,53L88,73C88,78.5 83.5,83 78,83L31,83C24.4,83 19,77.6 19,71L19,51C19,45.5 23.5,41 29,41Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="24"
+                android:startY="43"
+                android:endX="83"
+                android:endY="80"
+                android:type="linear">
+                <item android:offset="0" android:color="#FFFFFFFF" />
+                <item android:offset="1" android:color="#FFE0F2FE" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path
+        android:fillColor="#1A2563EB"
+        android:pathData="M19,55C31,65 48,72 70,74C76,74.6 82,73.7 88,71.6L88,73C88,78.5 83.5,83 78,83L31,83C24.4,83 19,77.6 19,71Z" />
+
+    <!-- Branded clasp and upward-growth spark. -->
+    <path
+        android:pathData="M68,54L88,54L88,72L68,72C62.5,72 58,67.5 58,62C58,57.6 61.6,54 68,54Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="60"
+                android:startY="57"
+                android:endX="88"
+                android:endY="69"
+                android:type="linear">
+                <item android:offset="0" android:color="#FF1D4ED8" />
+                <item android:offset="1" android:color="#FF172554" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M68,59a3,3 0,1 0,0 6a3,3 0,1 0,0 -6" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M83,27L85.1,32.9L91,35L85.1,37.1L83,43L80.9,37.1L75,35L80.9,32.9Z" />
+    <path
+        android:fillColor="#CCFFFFFF"
+        android:pathData="M90,43L91,45.8L94,47L91,48.2L90,51L89,48.2L86,47L89,45.8Z" />
+</vector>
