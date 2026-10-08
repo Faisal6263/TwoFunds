@@ -18,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -35,7 +36,7 @@ import com.example.ui.theme.*
 import java.util.Calendar
 import java.util.Locale
 
-private enum class SmsPeriodFilter(val label: String) {
+enum class SmsPeriodFilter(val label: String) {
     TODAY("Today"),
     WEEK("This Week"),
     MONTH("This Month"),
@@ -51,7 +52,7 @@ private enum class SmsSortOption(val label: String) {
 }
 
 @Composable
-fun SmsParserScreen(viewModel: MainViewModel) {
+fun SmsParserScreen(viewModel: MainViewModel, nowMillis: Long = System.currentTimeMillis()) {
     val expenses by viewModel.uiState.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
     val syncMessage by viewModel.syncMessage.collectAsStateWithLifecycle()
@@ -67,23 +68,17 @@ fun SmsParserScreen(viewModel: MainViewModel) {
     ) { permissions ->
         if (permissions[Manifest.permission.READ_SMS] == true) {
             coroutineScope.launch {
-                val smsMessages = readSms(context, limit = 1000, daysAgo = scanDays)
+                val smsMessages = readSms(context, daysAgo = scanDays)
                 viewModel.syncExpensesFromSms(smsMessages)
             }
         }
     }
 
-    val parsedData = remember(expenses) {
-        val parsedExpenses = expenses.filter { it.originalSms.isNotBlank() && !it.originalSms.startsWith("manual-") }
-        val totalSpent = parsedExpenses.filter { it.isDebit }.sumOf { it.amount }
-        val totalCredited = parsedExpenses.filter { it.isCredit }.sumOf { it.amount }
-        Triple(parsedExpenses, totalSpent, totalCredited)
+    val parsedExpenses = remember(expenses, nowMillis) {
+        reportableTransactions(expenses, nowMillis).filter { it.isSmsTransaction() }
     }
-    val parsedExpenses = parsedData.first
-    val totalSpent = parsedData.second
-    val totalCredited = parsedData.third
-    val filteredExpenses = remember(parsedExpenses, searchQuery, periodFilter, sortOption) {
-        val periodExpenses = parsedExpenses.filterByPeriod(periodFilter)
+    val filteredExpenses = remember(parsedExpenses, searchQuery, periodFilter, sortOption, nowMillis) {
+        val periodExpenses = parsedExpenses.filterByPeriod(periodFilter, nowMillis)
         val searchedExpenses = if (searchQuery.isBlank()) {
             periodExpenses
         } else {
@@ -97,6 +92,9 @@ fun SmsParserScreen(viewModel: MainViewModel) {
         searchedExpenses.sortedByOption(sortOption)
     }
 
+    val totalSpent = filteredExpenses.filter { it.isDebit }.totalAmount()
+    val totalCredited = filteredExpenses.filter { it.isCredit }.totalAmount()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -106,7 +104,7 @@ fun SmsParserScreen(viewModel: MainViewModel) {
     ) {
 
         Text("SMS Dashboard", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onBackground)
-        Text("${parsedExpenses.size} SMS transactions • Spent ₹${String.format("%.0f", totalSpent)} • Credited ₹${String.format("%.0f", totalCredited)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+        Text("${filteredExpenses.size} matching SMS transactions • Spent ₹${formatMoney(totalSpent)} • Credited ₹${formatMoney(totalCredited)}", modifier = Modifier.testTag("sms-summary"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
         
         Spacer(modifier = Modifier.height(16.dp))
         
@@ -160,7 +158,7 @@ fun SmsParserScreen(viewModel: MainViewModel) {
                     val hasReceive = ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
                     if (hasRead && hasReceive) {
                         coroutineScope.launch {
-                            val smsMessages = readSms(context, limit = 1000, daysAgo = 7)
+                            val smsMessages = readSms(context, daysAgo = 7)
                             viewModel.syncExpensesFromSms(smsMessages)
                         }
                     } else {
@@ -186,7 +184,7 @@ fun SmsParserScreen(viewModel: MainViewModel) {
                     val hasReceive = ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
                     if (hasRead && hasReceive) {
                         coroutineScope.launch {
-                            val smsMessages = readSms(context, limit = 1000, daysAgo = 30)
+                            val smsMessages = readSms(context, daysAgo = 30)
                             viewModel.syncExpensesFromSms(smsMessages)
                         }
                     } else {
@@ -281,15 +279,15 @@ fun SmsParserScreen(viewModel: MainViewModel) {
     }
 }
 
-private fun List<Expense>.filterByPeriod(periodFilter: SmsPeriodFilter): List<Expense> {
-    val now = Calendar.getInstance()
+fun List<Expense>.filterByPeriod(periodFilter: SmsPeriodFilter, nowMillis: Long = System.currentTimeMillis()): List<Expense> {
+    val now = Calendar.getInstance().apply { timeInMillis = nowMillis }
     val startMillis = when (periodFilter) {
         SmsPeriodFilter.TODAY -> now.startOfDayMillis()
         SmsPeriodFilter.WEEK -> now.startOfWeekMillis()
         SmsPeriodFilter.MONTH -> now.startOfMonthMillis()
         SmsPeriodFilter.ALL -> Long.MIN_VALUE
     }
-    return filter { it.dateInMillis >= startMillis }
+    return filter { it.dateInMillis >= startMillis && it.dateInMillis <= nowMillis }
 }
 
 private fun List<Expense>.sortedByOption(sortOption: SmsSortOption): List<Expense> =
@@ -311,8 +309,7 @@ private fun Calendar.startOfDayMillis(): Long =
 
 private fun Calendar.startOfWeekMillis(): Long =
     cloneCalendar().apply {
-        firstDayOfWeek = Calendar.MONDAY
-        set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+        add(Calendar.DAY_OF_YEAR, -((get(Calendar.DAY_OF_WEEK) + 5) % 7))
         set(Calendar.HOUR_OF_DAY, 0)
         set(Calendar.MINUTE, 0)
         set(Calendar.SECOND, 0)

@@ -13,7 +13,7 @@ import kotlin.math.roundToLong
     indices = [
         Index(
             value = ["merchantKey", "amountCents", "dayBucket", "minuteBucket", "transactionType"],
-            unique = true
+            unique = false
         )
     ]
 )
@@ -34,7 +34,7 @@ fun Expense.toDeletedTransaction(deletedAtMillis: Long = System.currentTimeMilli
         amountCents = amount.toAmountCents(),
         dayBucket = dateInMillis.toDayBucket(),
         minuteBucket = dateInMillis.toMinuteBucket(),
-        smsFingerprint = originalSms.toSmsFingerprint().orEmpty(),
+        smsFingerprint = referenceIdentity()?.let { "ref:$it" } ?: originalSms.toSmsFingerprint().orEmpty(),
         transactionType = transactionType,
         deletedAtMillis = deletedAtMillis
     )
@@ -48,17 +48,21 @@ fun List<DeletedTransaction>.matchesDeletedTransaction(expense: Expense): Boolea
     val dayBucket = expense.dateInMillis.toDayBucket()
     val minuteBucket = expense.dateInMillis.toMinuteBucket()
     val smsFingerprint = expense.originalSms.toSmsFingerprint()
+    val reference = expense.referenceIdentity()
 
     return any { deleted ->
-        val sameSms = smsFingerprint != null && smsFingerprint == deleted.smsFingerprint
+        val sameTimestamp = deleted.dayBucket == dayBucket && deleted.minuteBucket == minuteBucket
+        val sameDirectionAndAmount = deleted.transactionType == expense.transactionType && deleted.amountCents == amountCents
+        val sameSms = smsFingerprint != null && smsFingerprint == deleted.smsFingerprint && sameTimestamp && sameDirectionAndAmount
+        val sameReference = reference != null && deleted.smsFingerprint == "ref:$reference" && deleted.dayBucket == dayBucket && sameDirectionAndAmount
         val sameTransactionIdentity =
-            deleted.merchantKey == merchantKey &&
+            deleted.smsFingerprint.isBlank() && deleted.merchantKey == merchantKey &&
                 deleted.amountCents == amountCents &&
                 deleted.dayBucket == dayBucket &&
                 deleted.transactionType == expense.transactionType &&
-                abs(deleted.minuteBucket - minuteBucket) <= 10
+                deleted.minuteBucket == minuteBucket
 
-        sameSms || sameTransactionIdentity
+        sameSms || sameReference || sameTransactionIdentity
     }
 }
 

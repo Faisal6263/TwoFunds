@@ -73,11 +73,11 @@ fun SettingsScreen(
     onOpenSmsSync: () -> Unit,
     onOpenMonthlyLedger: () -> Unit
 ) {
-    var customLimitInput by remember(customDailyLimit) { mutableStateOf(customDailyLimit.toInt().toString()) }
-    var dailyPacingInput by remember(dailyPacingLimit) { mutableStateOf(dailyPacingLimit.toInt().toString()) }
-    var monthlyBudgetInput by remember(monthlyBudget) { mutableStateOf(monthlyBudget.toInt().toString()) }
-    var weeklyBudgetInput by remember(weeklyBudget) { mutableStateOf(weeklyBudget.toInt().toString()) }
-    var weekendAllowanceInput by remember(weekendAllowance) { mutableStateOf(weekendAllowance.toInt().toString()) }
+    var customLimitInput by remember(customDailyLimit) { mutableStateOf(moneyInput(customDailyLimit)) }
+    var dailyPacingInput by remember(dailyPacingLimit) { mutableStateOf(moneyInput(dailyPacingLimit)) }
+    var monthlyBudgetInput by remember(monthlyBudget) { mutableStateOf(moneyInput(monthlyBudget)) }
+    var weeklyBudgetInput by remember(weeklyBudget) { mutableStateOf(moneyInput(weeklyBudget)) }
+    var weekendAllowanceInput by remember(weekendAllowance) { mutableStateOf(moneyInput(weekendAllowance)) }
 
     Column(
         modifier = Modifier
@@ -152,7 +152,7 @@ fun SettingsScreen(
 
                 OutlinedTextField(
                     value = customLimitInput,
-                    onValueChange = { customLimitInput = it.filter(Char::isDigit) },
+                    onValueChange = { customLimitInput = it },
                     label = { Text("Custom daily limit") },
                     prefix = { Text("Rs.") },
                     singleLine = true,
@@ -162,7 +162,7 @@ fun SettingsScreen(
 
                 OutlinedTextField(
                     value = dailyPacingInput,
-                    onValueChange = { dailyPacingInput = it.filter(Char::isDigit) },
+                    onValueChange = { dailyPacingInput = it },
                     label = { Text("Weekday daily pacing") },
                     prefix = { Text("Rs.") },
                     singleLine = true,
@@ -172,7 +172,7 @@ fun SettingsScreen(
 
                 OutlinedTextField(
                     value = monthlyBudgetInput,
-                    onValueChange = { monthlyBudgetInput = it.filter(Char::isDigit) },
+                    onValueChange = { monthlyBudgetInput = it },
                     label = { Text("Monthly budget") },
                     prefix = { Text("Rs.") },
                     singleLine = true,
@@ -182,7 +182,7 @@ fun SettingsScreen(
 
                 OutlinedTextField(
                     value = weeklyBudgetInput,
-                    onValueChange = { weeklyBudgetInput = it.filter(Char::isDigit) },
+                    onValueChange = { weeklyBudgetInput = it },
                     label = { Text("Weekly budget") },
                     prefix = { Text("Rs.") },
                     singleLine = true,
@@ -192,7 +192,7 @@ fun SettingsScreen(
 
                 OutlinedTextField(
                     value = weekendAllowanceInput,
-                    onValueChange = { weekendAllowanceInput = it.filter(Char::isDigit) },
+                    onValueChange = { weekendAllowanceInput = it },
                     label = { Text("Weekend ride allowance") },
                     prefix = { Text("Rs.") },
                     singleLine = true,
@@ -201,12 +201,13 @@ fun SettingsScreen(
                 )
 
                 Button(
+                    enabled = listOf(customLimitInput, dailyPacingInput, monthlyBudgetInput, weeklyBudgetInput, weekendAllowanceInput).all { parseBudgetInput(it) != null },
                     onClick = {
-                        customLimitInput.toDoubleOrNull()?.takeIf { it > 0 }?.let(onCustomLimitChange)
-                        dailyPacingInput.toDoubleOrNull()?.takeIf { it > 0 }?.let(onDailyPacingChange)
-                        monthlyBudgetInput.toDoubleOrNull()?.takeIf { it > 0 }?.let(onMonthlyBudgetChange)
-                        weeklyBudgetInput.toDoubleOrNull()?.takeIf { it > 0 }?.let(onWeeklyBudgetChange)
-                        weekendAllowanceInput.toDoubleOrNull()?.takeIf { it > 0 }?.let(onWeekendAllowanceChange)
+                        parseBudgetInput(customLimitInput)?.let(onCustomLimitChange)
+                        parseBudgetInput(dailyPacingInput)?.let(onDailyPacingChange)
+                        parseBudgetInput(monthlyBudgetInput)?.let(onMonthlyBudgetChange)
+                        parseBudgetInput(weeklyBudgetInput)?.let(onWeeklyBudgetChange)
+                        parseBudgetInput(weekendAllowanceInput)?.let(onWeekendAllowanceChange)
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
                     modifier = Modifier.fillMaxWidth()

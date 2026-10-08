@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -17,11 +18,14 @@ interface ExpenseDao {
     @Query("SELECT * FROM expenses WHERE id = :id LIMIT 1")
     suspend fun getExpenseById(id: Int): Expense?
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertExpense(expense: Expense)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertExpense(expense: Expense): Long
     
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAll(expenses: List<Expense>)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAll(expenses: List<Expense>): List<Long>
+
+    @Update
+    suspend fun updateExpense(expense: Expense)
 
     @Query("DELETE FROM expenses WHERE id = :id")
     suspend fun deleteExpenseById(id: Int)

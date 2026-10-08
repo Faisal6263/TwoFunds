@@ -16,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -55,13 +56,13 @@ fun SpendRadarScreen(
     val radarData = remember(budgetSummary, viewProfile) {
         val actualDailyLimit = budgetSummary.activeDailyLimit
         val todayExpenses = budgetSummary.todayExpenses.filter {
-            viewProfile == null || it.spentBy == viewProfile?.displayName
+            viewProfile == null || viewProfile?.let(it::matchesProfile) == true
         }
-        val todayTotal = todayExpenses.filter { it.isDebit }.sumOf { it.amount }
-        val todayCredited = todayExpenses.filter { it.isCredit }.sumOf { it.amount }
-        val budgetUsed = (todayTotal - todayCredited).coerceAtLeast(0.0)
-        val remaining = (actualDailyLimit - todayTotal + todayCredited).coerceAtLeast(0.0)
-        val progress = if (actualDailyLimit > 0) (budgetUsed / actualDailyLimit).toFloat().coerceIn(0f, 1f) else 0f
+        val todayTotal = todayExpenses.filter { it.isDebit }.totalAmount()
+        val todayCredited = todayExpenses.filter { it.isCredit }.totalAmount()
+        // Profile filtering affects the ledger, not the shared household allowance.
+        val remaining = budgetSummary.todayRemaining
+        val progress = budgetSummary.todayProgress
         
         RadarData(actualDailyLimit, todayExpenses, todayTotal, todayCredited, remaining, progress, budgetSummary.todayDateLabel)
     }
@@ -147,7 +148,7 @@ fun SpendRadarScreen(
         Text("Today's Spend Radar", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            "Live dynamic budget radar advising exactly where & how much you can spend safely",
+            "Recorded transactions by profile. The allowance and remaining balance apply to the whole household.",
             style = MaterialTheme.typography.bodyMedium,
             color = TextSecondary
         )
@@ -217,7 +218,7 @@ fun SpendRadarScreen(
                                 SpendMode.FRUGAL -> "FRUGAL\nTARGET 🌿"
                                 SpendMode.STANDARD -> "STANDARD\nTARGET ⚖️"
                                 SpendMode.SPLURGE -> "SPLURGE\nTARGET 🍿"
-                                SpendMode.CUSTOM -> "CUSTOM\n₹${customDailyLimit.toInt()} ⚙️"
+                                SpendMode.CUSTOM -> "CUSTOM\n₹${formatMoney(customDailyLimit)} ⚙️"
                             }
 
                             Surface(
@@ -298,7 +299,7 @@ fun SpendRadarScreen(
                                     strokeCap = StrokeCap.Round
                                 )
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("${(progress * 100).toInt()}%", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                    Text(utilizationLabel((budgetSummary.todayTotal - budgetSummary.todayCreditTotal).coerceAtLeast(0.0), actualDailyLimit), modifier = Modifier.testTag("radar-utilization"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TextPrimary)
                                     Text("USED", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = TextSecondary, fontSize = 10.sp)
                                 }
                             }
@@ -308,25 +309,25 @@ fun SpendRadarScreen(
                     // Values
                     Column(modifier = Modifier.weight(0.55f)) {
                         Text("ALLOWED SPEND TODAY", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = TextSecondary, letterSpacing = 1.sp)
-                        Text("₹${String.format("%.0f", actualDailyLimit)}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text("₹${formatMoney(actualDailyLimit)}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = TextPrimary)
                         
                         Spacer(modifier = Modifier.height(16.dp))
                         
                         Text("CURRENT SPENT TODAY", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = TextSecondary, letterSpacing = 1.sp)
-                        Text("₹${String.format("%.0f", todayTotal)}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = TextSecondary)
+                        Text("₹${formatMoney(todayTotal)}", modifier = Modifier.testTag("radar-spent"), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = TextSecondary)
 
                         Spacer(modifier = Modifier.height(12.dp))
 
                         Text("CREDITED TODAY", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = TextSecondary, letterSpacing = 1.sp)
-                        Text("+₹${String.format("%.0f", todayCredited)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = SuccessGreen)
-                        Text("Net ${if (todayCredited - todayTotal >= 0) "+" else "-"}₹${String.format("%.0f", kotlin.math.abs(todayCredited - todayTotal))}", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                        Text("+₹${formatMoney(todayCredited)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = SuccessGreen)
+                        Text("Net ${if (todayCredited - todayTotal >= 0) "+" else "-"}₹${formatMoney(kotlin.math.abs(todayCredited - todayTotal))}", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                         
                         Spacer(modifier = Modifier.height(16.dp))
                         
                         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                             Column {
-                                Text("REMAINING BUFFER", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = TextPrimary, letterSpacing = 0.5.sp)
-                                Text("₹${String.format("%.0f", remaining)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = SuccessGreen)
+                                Text(if (remaining < 0) "OVER BUDGET" else "REMAINING BUFFER", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = TextPrimary, letterSpacing = 0.5.sp)
+                                Text("₹${formatMoney(kotlin.math.abs(remaining))}", modifier = Modifier.testTag("radar-remaining"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (remaining < 0) ErrorRed else SuccessGreen)
                             }
                             Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.background, border = BorderStroke(1.dp, CardBorder), modifier = Modifier.size(36.dp)) {
                                 Icon(Icons.Filled.Refresh, contentDescription = "Refresh", modifier = Modifier.padding(8.dp), tint = TextSecondary)
@@ -382,7 +383,7 @@ fun SpendRadarScreen(
         Spacer(modifier = Modifier.height(80.dp))
 
         if (showCustomLimitDialog) {
-            var inputValue by remember { mutableStateOf(customDailyLimit.toInt().toString()) }
+            var inputValue by remember { mutableStateOf(moneyInput(customDailyLimit)) }
             AlertDialog(
                 onDismissRequest = { showCustomLimitDialog = false },
                 title = {
@@ -403,7 +404,7 @@ fun SpendRadarScreen(
                         )
                         OutlinedTextField(
                             value = inputValue,
-                            onValueChange = { inputValue = it.filter { char -> char.isDigit() } },
+                            onValueChange = { inputValue = it },
                             label = { Text("Daily Limit (₹)") },
                             placeholder = { Text("e.g. 1000") },
                             singleLine = true,
@@ -421,8 +422,9 @@ fun SpendRadarScreen(
                 },
                 confirmButton = {
                     Button(
+                        enabled = parseBudgetInput(inputValue) != null,
                         onClick = {
-                            val limit = inputValue.toDoubleOrNull() ?: 1000.0
+                            val limit = parseBudgetInput(inputValue) ?: return@Button
                             onCustomLimitChange(limit)
                             onModeSelect(SpendMode.CUSTOM)
                             showCustomLimitDialog = false

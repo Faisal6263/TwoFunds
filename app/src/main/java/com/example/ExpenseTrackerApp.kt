@@ -34,6 +34,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -56,6 +60,26 @@ fun ExpenseTrackerApp(viewModel: MainViewModel = viewModel()) {
     val dailyPacingLimit by viewModel.dailyPacingLimit.collectAsStateWithLifecycle()
     val weeklyBudget by viewModel.weeklyBudget.collectAsStateWithLifecycle()
     val weekendAllowance by viewModel.weekendAllowance.collectAsStateWithLifecycle()
+    var reportNowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(expenses) {
+        // Newly recorded rows must be compared with the current instant, not the
+        // previous minute's reporting clock (which would briefly hide them).
+        reportNowMillis = System.currentTimeMillis()
+    }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) reportNowMillis = System.currentTimeMillis()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(Unit) {
+        while (true) {
+            reportNowMillis = System.currentTimeMillis()
+            delay(60_000L - reportNowMillis % 60_000L)
+        }
+    }
     val budgetSummary = remember(
         expenses,
         currentMode,
@@ -63,7 +87,8 @@ fun ExpenseTrackerApp(viewModel: MainViewModel = viewModel()) {
         dailyPacingLimit,
         monthlyBudget,
         weeklyBudget,
-        weekendAllowance
+        weekendAllowance,
+        reportNowMillis
     ) {
         buildBudgetSummary(
             expenses = expenses,
@@ -72,7 +97,8 @@ fun ExpenseTrackerApp(viewModel: MainViewModel = viewModel()) {
             dailyPacingLimit = dailyPacingLimit,
             monthlyBudget = monthlyBudget,
             weeklyBudget = weeklyBudget,
-            weekendAllowance = weekendAllowance
+            weekendAllowance = weekendAllowance,
+            nowMillis = reportNowMillis
         )
     }
     val context = LocalContext.current
@@ -84,7 +110,7 @@ fun ExpenseTrackerApp(viewModel: MainViewModel = viewModel()) {
     ) { permissions ->
         if (permissions[Manifest.permission.READ_SMS] == true) {
             coroutineScope.launch {
-                val smsMessages = readSms(context, limit = 50)
+                val smsMessages = readSms(context, daysAgo = maxOf(7, Calendar.getInstance().get(Calendar.DAY_OF_MONTH)))
                 viewModel.syncExpensesFromSms(smsMessages)
             }
         }
@@ -95,7 +121,7 @@ fun ExpenseTrackerApp(viewModel: MainViewModel = viewModel()) {
         val receiveSmsGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
         if (readSmsGranted && receiveSmsGranted) {
             coroutineScope.launch {
-                val smsMessages = readSms(context, limit = 50)
+                val smsMessages = readSms(context, daysAgo = maxOf(7, Calendar.getInstance().get(Calendar.DAY_OF_MONTH)))
                 viewModel.syncExpensesFromSms(smsMessages)
             }
         }
@@ -175,7 +201,7 @@ fun ExpenseTrackerApp(viewModel: MainViewModel = viewModel()) {
             }
             
             composable("sync") {
-                SmsParserScreen(viewModel = viewModel)
+                SmsParserScreen(viewModel = viewModel, nowMillis = reportNowMillis)
             }
             
             composable("planner") {
@@ -223,7 +249,7 @@ fun ExpenseTrackerApp(viewModel: MainViewModel = viewModel()) {
             }
 
             composable("timeline") {
-                TimelineScreen(expenses = expenses, onDeleteExpense = { viewModel.deleteExpense(it) })
+                TimelineScreen(expenses = reportableTransactions(expenses, reportNowMillis), onDeleteExpense = { viewModel.deleteExpense(it) })
             }
         }
     }
@@ -248,8 +274,9 @@ fun AnalyticsScreen(expenses: List<Expense>) {
         Text("Spending Analytics", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(16.dp))
         
-        val totalSpent = expenses.filter { it.isDebit }.sumOf { it.amount }
-        val totalCredited = expenses.filter { it.isCredit }.sumOf { it.amount }
+        val validExpenses = reportableTransactions(expenses, System.currentTimeMillis())
+        val totalSpent = validExpenses.filter { it.isDebit }.totalAmount()
+        val totalCredited = validExpenses.filter { it.isCredit }.totalAmount()
         Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -257,22 +284,22 @@ fun AnalyticsScreen(expenses: List<Expense>) {
         ) {
             Column(modifier = Modifier.padding(24.dp)) {
                 Text("Total Processed", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("₹${String.format("%.2f", totalSpent)}", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                Text("Credited: ₹${String.format("%.2f", totalCredited)} • Net: ₹${String.format("%.2f", totalCredited - totalSpent)}", style = MaterialTheme.typography.bodyMedium, color = SuccessGreen)
+                Text("₹${formatMoney(totalSpent)}", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text("Credited: ₹${formatMoney(totalCredited)} • Net: ₹${formatMoney(totalCredited - totalSpent)}", style = MaterialTheme.typography.bodyMedium, color = SuccessGreen)
             }
         }
 
-        val byCategory = expenses.filter { it.isDebit }.groupBy { it.category }.mapValues { it.value.sumOf { exp -> exp.amount } }.entries.sortedByDescending { it.value }
+        val byCategory = validExpenses.filter { it.isDebit }.groupBy { normalizeBudgetCategory(it.category) }.mapValues { it.value.totalAmount() }.entries.sortedByDescending { it.value }
         if (byCategory.isNotEmpty()) {
             Text("Top Categories", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(12.dp))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(byCategory.toList()) { (cat, amount) ->
-                    val progress = (amount / totalSpent.coerceAtLeast(1.0)).toFloat().coerceIn(0f, 1f)
+                    val progress = categoryShare(amount, totalSpent)
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(cat, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                            Text("₹${String.format("%.0f", amount)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            Text("₹${formatMoney(amount)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         LinearProgressIndicator(

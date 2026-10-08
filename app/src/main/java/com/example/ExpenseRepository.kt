@@ -1,134 +1,98 @@
 package com.example
 
 import kotlinx.coroutines.flow.Flow
+import java.util.UUID
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+
+private val ingestionMutex = Mutex()
+
+fun Expense.referenceIdentity(): String? {
+    if (!isSmsTransaction()) return null
+    val reference = Regex("(?i)\\b(?:UPI\\s+(?:ref(?:erence)?|txn)|UTR|RRN|(?:txn|transaction)\\s*(?:id|ref(?:erence)?))\\s*(?:no\\.?|number)?\\s*[:#-]?\\s*([A-Za-z0-9]{6,})\\b")
+        .find(originalSms)?.groupValues?.get(1)?.uppercase() ?: return null
+    val bank = listOf("ICICI", "HDFC", "SBI", "AXIS", "KOTAK").firstOrNull {
+        sourceSender.contains(it, true)
+    } ?: sourceSender.uppercase().replace(Regex("^[A-Z]{2}-"), "").takeIf { it.isNotBlank() } ?: return null
+    return "$bank|${currency.uppercase()}|$transactionType|$reference"
+}
 
 class ExpenseRepository(private val expenseDao: ExpenseDao) {
     val allExpenses: Flow<List<Expense>> = expenseDao.getAllExpenses()
 
-    private fun isDuplicate(newExpense: Expense, existing: List<Expense>): Boolean {
-        val cleanNewSms = if (newExpense.originalSms.isBlank()) "" else newExpense.originalSms.lowercase().replace(Regex("[^a-z0-9]"), "")
-        
-        for (old in existing) {
-            // 1. If SMS content is identical, it's a duplicate
-            if (cleanNewSms.isNotEmpty() && old.originalSms.isNotBlank()) {
-                val cleanOldSms = old.originalSms.lowercase().replace(Regex("[^a-z0-9]"), "")
-                if (cleanNewSms == cleanOldSms) return true
-            }
-            
-            // 2. Check similar transaction window (within 5 minutes, same amount and merchant)
-            val timeDiff = Math.abs(newExpense.dateInMillis - old.dateInMillis)
-            if (timeDiff < 300000 && 
-                newExpense.amount == old.amount && 
-                newExpense.merchant.equals(old.merchant, ignoreCase = true) &&
-                newExpense.transactionType == old.transactionType
-            ) {
-                return true
-            }
-        }
-        return false
-    }
+    // Amount, merchant and proximity alone do not identify a transaction.
+    private fun Expense.smsIdentity(): Pair<String, Long>? =
+        if (isSmsTransaction()) originalSms.trim().replace(Regex("\\s+"), " ") to dateInMillis else null
 
     suspend fun insert(expense: Expense) {
-        if (expense.isSmsTransaction() && expenseDao.getDeletedTransactions().matchesDeletedTransaction(expense)) return
-
-        val existing = expenseDao.getExpensesList()
-        val cleanNewSms = if (expense.originalSms.isBlank()) "" else expense.originalSms.lowercase().replace(Regex("[^a-z0-9]"), "")
-        val hasDuplicate = existing.any { old ->
-            if (cleanNewSms.isNotEmpty() && old.originalSms.isNotBlank()) {
-                val cleanOldSms = old.originalSms.lowercase().replace(Regex("[^a-z0-9]"), "")
-                if (cleanNewSms == cleanOldSms) {
-                    if (old.sourceSender.isBlank() && expense.sourceSender.isNotBlank()) {
-                        expenseDao.insertExpense(old.copy(sourceSender = expense.sourceSender))
-                    }
-                    return@any true
-                }
-            }
-            val timeDiff = Math.abs(expense.dateInMillis - old.dateInMillis)
-            timeDiff < 300000 && expense.amount == old.amount &&
-                expense.merchant.equals(old.merchant, ignoreCase = true) &&
-                expense.transactionType == old.transactionType
-        }
-        if (!hasDuplicate) {
-            expenseDao.insertExpense(expense)
-        }
+        insertAll(listOf(expense))
     }
-    
-    suspend fun insertAll(expenses: List<Expense>): Int {
+
+    suspend fun insertAll(expenses: List<Expense>): Int = ingestionMutex.withLock {
         val deletedTransactions = expenseDao.getDeletedTransactions()
         val existing = expenseDao.getExpensesList()
-        val existingSmsByFingerprint = existing.mapNotNull {
-            val clean = it.originalSms.lowercase().replace(Regex("[^a-z0-9]"), "")
-            if (clean.isEmpty()) null else clean to it
-        }.toMap().toMutableMap()
-        
-        // Group existing by amount to avoid iterating the whole database for window checks
-        val existingByAmount = existing.groupBy { it.amount }.mapValues { entry ->
-            entry.value.toMutableList()
-        }.toMutableMap()
-        
-        val nonDuplicates = mutableListOf<Expense>()
-        val senderMetadataUpdates = mutableListOf<Expense>()
-        
-        for (expense in expenses) {
-            if (expense.isSmsTransaction() && deletedTransactions.matchesDeletedTransaction(expense)) {
+        val existingByIdentity = existing.mapNotNull { row -> row.smsIdentity()?.let { it to row } }
+            .toMap().toMutableMap()
+        val existingManualIds = existing.filter { !it.isSmsTransaction() }.map { it.originalSms }.toMutableSet()
+        val existingReferences = existing.mapNotNull { row -> row.referenceIdentity()?.let { it to row.amount } }.toMap().toMutableMap()
+        val newRows = mutableListOf<Expense>()
+        for (input in expenses) {
+            if (!input.amount.isFinite() || input.amount < 0 || input.dateInMillis <= 0 || (!input.isDebit && !input.isCredit)) continue
+            val expense = input.copy(amount = roundMoney(input.amount), originalSms = input.originalSms.ifBlank { "manual-${UUID.randomUUID()}" })
+            if (expense.isSmsTransaction() && deletedTransactions.matchesDeletedTransaction(expense)) continue
+            val reference = expense.referenceIdentity()
+            if (reference != null && existingReferences[reference] == expense.amount) continue
+            val identity = expense.smsIdentity()
+            val old = identity?.let(existingByIdentity::get)
+            if (old != null) {
+                if (old.id != 0 && old.sourceSender.isBlank() && expense.sourceSender.isNotBlank()) {
+                    val updated = old.copy(sourceSender = expense.sourceSender)
+                    expenseDao.updateExpense(updated)
+                    existingByIdentity[identity] = updated
+                }
                 continue
             }
-
-            val cleanNewSms = if (expense.originalSms.isBlank()) "" else expense.originalSms.lowercase().replace(Regex("[^a-z0-9]"), "")
-            
-            var isDup = false
-            if (cleanNewSms.isNotEmpty() && existingSmsByFingerprint.containsKey(cleanNewSms)) {
-                val existingExpense = existingSmsByFingerprint.getValue(cleanNewSms)
-                if (existingExpense.sourceSender.isBlank() && expense.sourceSender.isNotBlank()) {
-                    val updatedExpense = existingExpense.copy(sourceSender = expense.sourceSender)
-                    senderMetadataUpdates.add(updatedExpense)
-                    existingSmsByFingerprint[cleanNewSms] = updatedExpense
-                }
-                isDup = true
-            } else {
-                // Check similar transaction window (within 5 minutes, same amount and merchant) from existing list by amount
-                val sameAmountList = existingByAmount[expense.amount]
-                if (sameAmountList != null) {
-                    for (old in sameAmountList) {
-                        val timeDiff = Math.abs(expense.dateInMillis - old.dateInMillis)
-                        if (timeDiff < 300000 && expense.merchant.equals(old.merchant, ignoreCase = true) && expense.transactionType == old.transactionType) {
-                            isDup = true
-                            break
-                        }
-                    }
-                }
-            }
-            
-            if (!isDup) {
-                nonDuplicates.add(expense)
-                if (cleanNewSms.isNotEmpty()) {
-                    existingSmsByFingerprint[cleanNewSms] = expense
-                }
-                existingByAmount.getOrPut(expense.amount) { mutableListOf() }.add(expense)
-            }
+            if (identity == null && !existingManualIds.add(expense.originalSms)) continue
+            newRows.add(expense)
+            if (identity != null) existingByIdentity[identity] = expense
+            if (reference != null) existingReferences[reference] = expense.amount
         }
-        val recordsToSave = senderMetadataUpdates + nonDuplicates
-        if (recordsToSave.isNotEmpty()) {
-            expenseDao.insertAll(recordsToSave)
-        }
-        return nonDuplicates.size
+        if (newRows.isEmpty()) return@withLock 0
+        // IGNORE plus the database identity constraint also protects concurrent SMS ingestion.
+        expenseDao.insertAll(newRows).count { it != -1L }
     }
 
     suspend fun getById(id: Int): Expense? = expenseDao.getExpenseById(id)
+
+    /** Reconcile older parser results to their saved source without deleting evidence. */
+    suspend fun reconcileSavedSms(): Int = ingestionMutex.withLock {
+        var corrected = 0
+        for (row in expenseDao.getExpensesList().filter { it.isSmsTransaction() }) {
+            val parsed = parseExpenseFromSms(row.sourceSender, row.originalSms, row.dateInMillis)
+            val updated = when {
+                isUnsettledFinancialSms(row.originalSms) -> row.copy(transactionType = "UNCONFIRMED")
+                parsed != null -> row.copy(amount = parsed.amount, currency = parsed.currency, transactionType = parsed.transactionType)
+                else -> row // Unsupported or ambiguous messages need source reconciliation.
+            }
+            if (updated != row) {
+                expenseDao.updateExpense(updated)
+                corrected++
+            }
+        }
+        corrected
+    }
 
     suspend fun rememberDeleted(expense: Expense) {
         expenseDao.insertDeletedTransaction(expense.toDeletedTransaction())
     }
 
-    suspend fun removeDeletedSmsBackedExpenses(isDeletedSmsBody: (String) -> Boolean): Int {
-        val deletedTransactions = expenseDao.getDeletedTransactions()
-        val expensesToRemove = expenseDao.getExpensesList().filter { expense ->
-            expense.isSmsTransaction() &&
-                (isDeletedSmsBody(expense.originalSms) || deletedTransactions.matchesDeletedTransaction(expense))
+    suspend fun removeDeletedSmsBackedExpenses(isDeletedSms: (Expense) -> Boolean): Int {
+        val deleted = expenseDao.getDeletedTransactions()
+        val rows = expenseDao.getExpensesList().filter {
+            it.isSmsTransaction() && (isDeletedSms(it) || deleted.matchesDeletedTransaction(it))
         }
-
-        expensesToRemove.forEach { expenseDao.deleteExpenseById(it.id) }
-        return expensesToRemove.size
+        rows.forEach { expenseDao.deleteExpenseById(it.id) }
+        return rows.size
     }
 
     suspend fun deleteById(id: Int) = expenseDao.deleteExpenseById(id)

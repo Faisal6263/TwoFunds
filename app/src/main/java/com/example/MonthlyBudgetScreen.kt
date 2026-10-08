@@ -85,12 +85,12 @@ fun MonthlyBudgetScreen(
     val monthlyExpenses = budgetSummary.monthlyExpenses
     val spentByCategory = remember(monthlyExpenses) {
         monthlyExpenses.filter { it.isDebit }.groupBy { normalizeBudgetCategory(it.category) }
-            .mapValues { entry -> entry.value.sumOf { it.amount } }
+            .mapValues { entry -> entry.value.totalAmount() }
     }
     val totalSpent = budgetSummary.monthlyTotal
     val totalCredited = budgetSummary.monthlyCreditTotal
     val budgetUsed = (totalSpent - totalCredited).coerceAtLeast(0.0)
-    val assignedBudget = BudgetCategories.sumOf { categoryBudgets[it] ?: 0.0 }
+    val assignedBudget = roundMoney(BudgetCategories.sumOf { safeBudget(categoryBudgets[it] ?: 0.0) })
     val monthName = budgetSummary.monthName
     val monthlyProgress = budgetSummary.monthlyProgress
 
@@ -131,8 +131,8 @@ fun MonthlyBudgetScreen(
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Column {
                                 Text("MONTHLY PLAN 🧾", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.78f))
-                                Text("₹${String.format("%,.0f", budgetUsed)} / ₹${String.format("%,.0f", monthlyBudget)}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = Color.White)
-                                Text("₹${String.format("%,.0f", totalSpent)} spent • ₹${String.format("%,.0f", totalCredited)} returned", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.78f))
+                                Text("₹${formatMoney(budgetUsed)} / ₹${formatMoney(monthlyBudget)}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = Color.White)
+                                Text("₹${formatMoney(totalSpent)} spent • ₹${formatMoney(totalCredited)} credited", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.78f))
                             }
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
@@ -152,7 +152,10 @@ fun MonthlyBudgetScreen(
                             color = if (monthlyProgress > 0.9f) WarningAmber else SuccessGreen,
                             trackColor = Color.White.copy(alpha = 0.24f)
                         )
-                        Text("Assigned across categories: ₹${String.format("%,.0f", assignedBudget)}", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.82f))
+                        Text("Assigned across categories: ₹${formatMoney(assignedBudget)}", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.82f))
+                        if (assignedBudget > monthlyBudget) {
+                            Text("Overallocated by ₹${formatMoney(assignedBudget - monthlyBudget)}", color = Color.White)
+                        }
                     }
                 }
             }
@@ -162,7 +165,7 @@ fun MonthlyBudgetScreen(
             }
 
             items(BudgetCategories, key = { it }) { category ->
-                val budget = categoryBudgets[category] ?: 0.0
+                val budget = safeBudget(categoryBudgets[category] ?: 0.0)
                 val spent = spentByCategory[category] ?: 0.0
                 CategoryBudgetRow(
                     category = category,
@@ -201,8 +204,8 @@ fun MonthlyBudgetScreen(
 
 @Composable
 private fun CategoryBudgetRow(category: String, budget: Double, spent: Double, onEdit: () -> Unit) {
-    val progress = if (budget > 0) (spent / budget).toFloat().coerceIn(0f, 1f) else 0f
-    val isOver = budget > 0 && spent > budget
+    val progress = budgetProgress(spent, budget)
+    val isOver = spent > budget
     val icon = if (category == "Rides") Icons.Outlined.TwoWheeler else Icons.Outlined.PieChart
 
     Card(
@@ -222,7 +225,7 @@ private fun CategoryBudgetRow(category: String, budget: Double, spent: Double, o
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(if (category == "Rides") "Rides 🛵" else category, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = TextPrimary)
-                    Text("Spent ₹${String.format("%,.0f", spent)} of ₹${String.format("%,.0f", budget)}", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                    Text("Spent ₹${formatMoney(spent)} of ₹${formatMoney(budget)}", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                 }
                 Surface(
                     shape = RoundedCornerShape(10.dp),
@@ -249,7 +252,7 @@ private fun BudgetAmountDialog(
     onDismiss: () -> Unit,
     onSave: (Double) -> Unit
 ) {
-    var input by remember(currentAmount) { mutableStateOf(currentAmount.toInt().toString()) }
+    var input by remember(currentAmount) { mutableStateOf(moneyInput(currentAmount)) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -257,7 +260,7 @@ private fun BudgetAmountDialog(
         text = {
             OutlinedTextField(
                 value = input,
-                onValueChange = { input = it.filter(Char::isDigit) },
+                onValueChange = { input = it },
                 label = { Text("Budget amount") },
                 prefix = { Text("Rs.") },
                 singleLine = true,
@@ -268,7 +271,8 @@ private fun BudgetAmountDialog(
         },
         confirmButton = {
             Button(
-                onClick = { input.toDoubleOrNull()?.takeIf { it >= 0 }?.let(onSave) },
+                enabled = parseBudgetInput(input) != null,
+                onClick = { parseBudgetInput(input)?.let(onSave) },
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor)
             ) {
                 Text("Save", fontWeight = FontWeight.Bold)

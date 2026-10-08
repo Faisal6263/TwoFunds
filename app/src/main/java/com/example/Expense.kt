@@ -6,7 +6,7 @@ import androidx.room.PrimaryKey
 
 @Entity(
     tableName = "expenses",
-    indices = [Index(value = ["originalSms"], unique = true)]
+    indices = [Index(value = ["originalSms", "dateInMillis"], unique = true)]
 )
 data class Expense(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
@@ -22,14 +22,14 @@ data class Expense(
 )
 
 val Expense.isCredit: Boolean get() = transactionType == TransactionType.CREDIT.name
-val Expense.isDebit: Boolean get() = !isCredit
+val Expense.isDebit: Boolean get() = transactionType == TransactionType.DEBIT.name
 
 const val TRACKED_CREDIT_UPI_ID = "Faisal62632@ibl"
 const val TRACKED_CREDIT_BANK = "ICICI"
 const val TRACKED_CREDIT_ACCOUNT = "XX070"
 
 fun String.containsTrackedCreditUpi(): Boolean =
-    contains(TRACKED_CREDIT_UPI_ID, ignoreCase = true)
+    Regex("(?i)(?<![A-Za-z0-9._@-])${Regex.escape(TRACKED_CREDIT_UPI_ID)}(?![A-Za-z0-9_@-]|\\.[A-Za-z0-9])").containsMatchIn(this)
 
 fun String.containsTrackedCreditAccount(): Boolean =
     Regex("(?i)\\b(?:acct|a/c|account)\\s*(?:no\\.?\\s*)?${Regex.escape(TRACKED_CREDIT_ACCOUNT)}\\b")

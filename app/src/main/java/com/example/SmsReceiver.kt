@@ -21,11 +21,13 @@ class SmsReceiver : BroadcastReceiver() {
                     val pendingResult = goAsync()
                     CoroutineScope(Dispatchers.IO).launch {
                         try {
-                            if (!DeletedSmsStore.isDeleted(context, body)) {
+                            if (!DeletedSmsStore.isDeleted(context, body, messageTimestamp)) {
                                 val db = DefaultDatabase.getInstance(context)
                                 val repository = ExpenseRepository(db.expenseDao())
                                 parseExpenseFromSms(address, body, messageTimestamp)?.let { expense ->
-                                    repository.insert(expense)
+                                    val prefs = context.getSharedPreferences("spend_radar_prefs", Context.MODE_PRIVATE)
+                                    val profile = runCatching { SpenderProfile.valueOf(prefs.getString("current_spender", "HUSBAND") ?: "HUSBAND") }.getOrDefault(SpenderProfile.HUSBAND)
+                                    repository.insert(expense.copy(spentBy = profile.displayName))
                                 }
                             }
                         } catch (e: Exception) {

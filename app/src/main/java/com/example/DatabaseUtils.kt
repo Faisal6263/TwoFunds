@@ -49,6 +49,15 @@ private val MIGRATION_5_6 = object : Migration(5, 6) {
     }
 }
 
+internal val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("DROP INDEX IF EXISTS index_expenses_originalSms")
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_expenses_originalSms_dateInMillis ON expenses (originalSms, dateInMillis)")
+        db.execSQL("DROP INDEX IF EXISTS index_deleted_transactions_merchantKey_amountCents_dayBucket_minuteBucket_transactionType")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_deleted_transactions_merchantKey_amountCents_dayBucket_minuteBucket_transactionType ON deleted_transactions (merchantKey, amountCents, dayBucket, minuteBucket, transactionType)")
+    }
+}
+
 object DefaultDatabase {
     @Volatile
     private var INSTANCE: AppDatabase? = null
@@ -64,6 +73,7 @@ object DefaultDatabase {
             .addMigrations(MIGRATION_3_4)
             .addMigrations(MIGRATION_4_5)
             .addMigrations(MIGRATION_5_6)
+            .addMigrations(MIGRATION_6_7)
             .fallbackToDestructiveMigration()
             .build()
             INSTANCE = instance
@@ -168,8 +178,14 @@ fun looksLikeFinancialSms(sender: String, body: String): Boolean {
     return hasMoneyToken && (senderLooksFinancial || textLooksFinancial)
 }
 
+fun isUnsettledFinancialSms(body: String): Boolean =
+    Regex("(?i)\\b(?:failed|declined|pending|unsuccessful|cancelled|canceled|requested|scheduled)\\b|\\b(?:not|never)\\s+(?:been\\s+)?(?:debited|charged)|\\b(?:will|would)\\s+be\\s+(?:debited|credited)")
+        .containsMatchIn(body)
+
 fun parseExpenseFromSms(sender: String, body: String, dateInMillis: Long): Expense? {
     if (!looksLikeFinancialSms(sender, body)) return null
+    // A request, failed payment, or pending transfer is not a settled transaction.
+    if (isUnsettledFinancialSms(body)) return null
 
     val transactionType = detectTransactionType(body) ?: return null
 
@@ -177,11 +193,11 @@ fun parseExpenseFromSms(sender: String, body: String, dateInMillis: Long): Expen
     // belongs in budget reports. Other accounts and VPAs must not inflate the budget.
     if (transactionType == TransactionType.CREDIT && !isTrackedCreditDestination(sender, body)) return null
 
-    val amount = extractExpenseAmount(body) ?: return null
+    val amount = extractExpenseAmount(body, transactionType) ?: return null
     val merchant = parseMerchantFromText(sender, body)
 
     return Expense(
-        amount = amount,
+        amount = roundMoney(amount),
         currency = inferCurrency(body),
         merchant = merchant,
         category = if (transactionType == TransactionType.CREDIT) inferCreditCategory(body) else inferCategory(merchant, body),
@@ -193,21 +209,13 @@ fun parseExpenseFromSms(sender: String, body: String, dateInMillis: Long): Expen
 }
 
 private fun detectTransactionType(body: String): TransactionType? {
-    val text = body.lowercase()
-    val debitKeywords = listOf(
-        "debited", "debit", "spent", "paid", "sent", "transferred", "withdrawn",
-        "deducted", "purchase", "payment of", "txn of", "transaction of", "charged"
-    )
-    val creditKeywords = listOf(
-        "credited", "credit to", "received", "deposited", "deposit", "refund", "cashback",
-        "reversal", "reversed", "salary", "interest credit"
-    )
-    val hasDebit = debitKeywords.any { text.contains(it) } || Regex("(?i)\\bdr\\b").containsMatchIn(body)
-    val hasCredit = creditKeywords.any { text.contains(it) } || Regex("(?i)\\bcr\\b").containsMatchIn(body)
-
+    val hasDebitAction = Regex("(?i)\\b(?:debited|spent|paid|sent|withdrawn|deducted|charged|dr)\\b").containsMatchIn(body)
+    val hasCreditAction = Regex("(?i)\\b(?:credited|received|deposited|cr)\\b").containsMatchIn(body)
     return when {
-        hasCredit && !hasDebit -> TransactionType.CREDIT
-        hasDebit -> TransactionType.DEBIT
+        hasCreditAction && !hasDebitAction -> TransactionType.CREDIT
+        hasDebitAction && !hasCreditAction -> TransactionType.DEBIT
+        hasCreditAction && hasDebitAction -> null // Two directions need account-level disambiguation.
+        Regex("(?i)\\b(?:payment|purchase|txn|transaction)\\s+of\\b").containsMatchIn(body) -> TransactionType.DEBIT
         else -> null
     }
 }
@@ -236,9 +244,13 @@ private fun isExpenseDebit(body: String): Boolean {
     return !isCreditOnly
 }
 
-private data class AmountCandidate(val amount: Double, val score: Int)
+private data class AmountCandidate(val amount: Double, val distanceToAction: Int)
 
-private fun extractExpenseAmount(body: String): Double? {
+private fun extractExpenseAmount(body: String, type: TransactionType): Double? {
+    val actions = Regex(if (type == TransactionType.CREDIT)
+        "(?i)\\b(?:credited|received|deposited|cr)\\b" else
+        "(?i)\\b(?:debited|spent|paid|sent|withdrawn|deducted|charged|dr|payment of|purchase of|txn of|transaction of)\\b")
+        .findAll(body).toList()
     val amountPatterns = listOf(
         Regex("(?i)(?:rs\\.?|inr|\\u20B9)\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)"),
         Regex("(?i)([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*(?:rs\\.?|inr)"),
@@ -249,13 +261,25 @@ private fun extractExpenseAmount(body: String): Double? {
         regex.findAll(body).mapNotNull { match ->
             val rawAmount = match.groupValues.getOrNull(1).orEmpty().replace(",", "")
             val amount = rawAmount.toDoubleOrNull() ?: return@mapNotNull null
-            AmountCandidate(amount, scoreAmountCandidate(body, match.range.first))
+            if (!amount.isFinite() || amount <= 0.0) return@mapNotNull null
+            val amountRange = match.groups[1]!!.range
+            val prefix = body.substring((amountRange.first - 60).coerceAtLeast(0), amountRange.first)
+            // A balance/limit amount must never win simply because it is near a debit verb.
+            if (Regex("(?i)(?:bal(?:ance)?|available|avl|limit|due|outstanding)\\s*[:=-]?\\s*(?:rs\\.?|inr|₹)?\\s*$")
+                    .containsMatchIn(prefix)) return@mapNotNull null
+            val distance = actions.minOfOrNull { action ->
+                when {
+                    amountRange.last < action.range.first -> action.range.first - amountRange.last
+                    action.range.last < amountRange.first -> amountRange.first - action.range.last
+                    else -> 0
+                }
+            } ?: Int.MAX_VALUE
+            AmountCandidate(amount, distance)
         }.toList()
     }
 
     return candidates
-        .filter { it.amount > 0.0 }
-        .maxByOrNull { it.score }
+        .minByOrNull { it.distanceToAction }
         ?.amount
 }
 

@@ -58,27 +58,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val currentSpender: StateFlow<SpenderProfile> = _currentSpender.asStateFlow()
 
     private val _customDailyLimit = MutableStateFlow(
-        prefs.getFloat("custom_daily_limit", 1000f).toDouble()
+        prefs.readBudget("custom_daily_limit", 1000.0)
     )
     val customDailyLimit: StateFlow<Double> = _customDailyLimit.asStateFlow()
 
     private val _dailyPacingLimit = MutableStateFlow(
-        prefs.getFloat("daily_pacing_limit", 300f).toDouble()
+        prefs.readBudget("daily_pacing_limit", 300.0)
     )
     val dailyPacingLimit: StateFlow<Double> = _dailyPacingLimit.asStateFlow()
 
     private val _monthlyBudget = MutableStateFlow(
-        prefs.getFloat("monthly_budget", 30000f).toDouble()
+        prefs.readBudget("monthly_budget", 30000.0)
     )
     val monthlyBudget: StateFlow<Double> = _monthlyBudget.asStateFlow()
 
     private val _weeklyBudget = MutableStateFlow(
-        prefs.getFloat("weekly_budget", 4000f).toDouble()
+        prefs.readBudget("weekly_budget", 4000.0)
     )
     val weeklyBudget: StateFlow<Double> = _weeklyBudget.asStateFlow()
 
     private val _weekendAllowance = MutableStateFlow(
-        prefs.getFloat("weekend_allowance", 1500f).toDouble()
+        prefs.readBudget("weekend_allowance", 1500.0)
     )
     val weekendAllowance: StateFlow<Double> = _weekendAllowance.asStateFlow()
 
@@ -93,28 +93,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setCustomDailyLimit(limit: Double) {
-        _customDailyLimit.value = limit
-        prefs.edit().putFloat("custom_daily_limit", limit.toFloat()).apply()
+        if (!limit.isFinite() || limit < 0) return
+        val value = roundMoney(limit)
+        _customDailyLimit.value = value
+        prefs.edit().putString("custom_daily_limit", moneyInput(value)).apply()
     }
 
     fun setDailyPacingLimit(limit: Double) {
-        _dailyPacingLimit.value = limit
-        prefs.edit().putFloat("daily_pacing_limit", limit.toFloat()).apply()
+        if (!limit.isFinite() || limit < 0) return
+        val value = roundMoney(limit)
+        _dailyPacingLimit.value = value
+        prefs.edit().putString("daily_pacing_limit", moneyInput(value)).apply()
     }
 
     fun setMonthlyBudget(budget: Double) {
-        _monthlyBudget.value = budget
-        prefs.edit().putFloat("monthly_budget", budget.toFloat()).apply()
+        if (!budget.isFinite() || budget < 0) return
+        val value = roundMoney(budget)
+        _monthlyBudget.value = value
+        prefs.edit().putString("monthly_budget", moneyInput(value)).apply()
     }
 
     fun setWeeklyBudget(budget: Double) {
-        _weeklyBudget.value = budget
-        prefs.edit().putFloat("weekly_budget", budget.toFloat()).apply()
+        if (!budget.isFinite() || budget < 0) return
+        val value = roundMoney(budget)
+        _weeklyBudget.value = value
+        prefs.edit().putString("weekly_budget", moneyInput(value)).apply()
     }
 
     fun setWeekendAllowance(allowance: Double) {
-        _weekendAllowance.value = allowance
-        prefs.edit().putFloat("weekend_allowance", allowance.toFloat()).apply()
+        if (!allowance.isFinite() || allowance < 0) return
+        val value = roundMoney(allowance)
+        _weekendAllowance.value = value
+        prefs.edit().putString("weekend_allowance", moneyInput(value)).apply()
     }
 
     private val _syncMessage = MutableStateFlow<String?>(null)
@@ -122,7 +132,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
-            repository.removeDeletedSmsBackedExpenses { DeletedSmsStore.isDeleted(appContext, it) }
+            repository.removeDeletedSmsBackedExpenses { DeletedSmsStore.isDeleted(appContext, it.originalSms, it.dateInMillis) }
+            val corrected = repository.reconcileSavedSms()
+            if (corrected > 0) _syncMessage.value = "Reconciled $corrected saved SMS records to their original messages. Unsettled messages are excluded."
         }
     }
 
@@ -136,9 +148,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _isSyncing.value = true
 
             try {
-                val currentExpenses = uiState.value.map { it.originalSms }.toSet()
+                val currentExpenses = uiState.value.map { it.originalSms to it.dateInMillis }.toSet()
                 val candidates = smsList.filter {
-                    !currentExpenses.contains(it.body) && !DeletedSmsStore.isDeleted(appContext, it.body)
+                    !currentExpenses.contains(it.body to it.date) && !DeletedSmsStore.isDeleted(appContext, it.body, it.date)
                 }
                 _syncMessage.value = "Read ${smsList.size} SMS. Parsing ${candidates.size} new messages locally..."
 
@@ -170,9 +182,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val expense = uiState.value.find { it.id == id } ?: repository.getById(id)
             if (expense != null && expense.isSmsTransaction()) {
                 repository.rememberDeleted(expense)
-                DeletedSmsStore.rememberDeleted(appContext, expense.originalSms)
+                DeletedSmsStore.rememberDeleted(appContext, expense.originalSms, expense.dateInMillis)
             }
             repository.deleteById(id)
         }
+    }
+}
+
+private fun android.content.SharedPreferences.readBudget(key: String, fallback: Double): Double {
+    val value = all[key]
+    return when (value) {
+        is String -> parseBudgetInput(value) ?: fallback
+        is Number -> safeBudget(value.toDouble())
+        else -> fallback
     }
 }

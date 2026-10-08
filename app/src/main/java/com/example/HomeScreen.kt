@@ -24,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontStyle
@@ -65,7 +66,7 @@ fun HomeScreen(
             listOf("Food", "Transport", "Groceries", "Utilities", "Shopping", "Health", "Entertainment", "Other")
         }
         val amount = amountStr.toDoubleOrNull()
-        val canSave = merchant.isNotBlank() && amount != null && amount > 0
+        val canSave = merchant.isNotBlank() && amount != null && amount.isFinite() && roundMoney(amount) > 0
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
             title = { Text("Add Transaction") },
@@ -91,11 +92,11 @@ fun HomeScreen(
                     )
                     OutlinedTextField(
                         value = amountStr,
-                        onValueChange = { amountStr = it.filter { char -> char.isDigit() || char == '.' } },
+                        onValueChange = { amountStr = it },
                         label = { Text("Amount") },
                         prefix = { Text("Rs.") },
                         singleLine = true,
-                        isError = amountStr.isNotBlank() && (amount == null || amount <= 0)
+                        isError = amountStr.isNotBlank() && (amount == null || !amount.isFinite() || roundMoney(amount) <= 0)
                     )
                     Text("Category", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
                     categories.chunked(4).forEach { rowCategories ->
@@ -118,7 +119,7 @@ fun HomeScreen(
                 Button(enabled = canSave, onClick = {
                     val parsedAmount = amount ?: return@Button
                     if (merchant.isNotBlank() && parsedAmount > 0) {
-                        onAddExpense(Expense(amount = parsedAmount, currency = "INR", merchant = merchant.trim(), category = category, dateInMillis = System.currentTimeMillis(), originalSms = "manual-" + java.util.UUID.randomUUID().toString(), transactionType = transactionType.name))
+                        onAddExpense(Expense(amount = roundMoney(parsedAmount), currency = "INR", merchant = merchant.trim(), category = category, dateInMillis = System.currentTimeMillis(), originalSms = "manual-" + java.util.UUID.randomUUID().toString(), transactionType = transactionType.name))
                         showAddDialog = false
                     }
                 }) { Text("Add") }
@@ -130,14 +131,7 @@ fun HomeScreen(
     }
 
     val homeData = remember(expenses, budgetSummary) {
-        val demoExpenses = listOf(
-            Expense(amount = 540.0, category = "Food", currency = "₹", merchant = "Zomato Chicken Roll", dateInMillis = System.currentTimeMillis(), originalSms = ""),
-            Expense(amount = 1250.0, category = "Petrol", currency = "₹", merchant = "HPCL Fuel Station", dateInMillis = System.currentTimeMillis(), originalSms = ""),
-            Expense(amount = 1800.0, category = "Utility Bills", currency = "₹", merchant = "Electricity Bill Payment", dateInMillis = System.currentTimeMillis(), originalSms = ""),
-            Expense(amount = 1200.0, category = "Shopping", currency = "₹", merchant = "Zara Summer Wear", dateInMillis = System.currentTimeMillis(), originalSms = "")
-        )
-        val reportableExpenses = expenses.filter { it.isDebit || it.isTrackedCredit }
-        val displayExpenses = if (reportableExpenses.isNotEmpty()) reportableExpenses.take(5) else demoExpenses
+        val displayExpenses = reportableTransactions(expenses, budgetSummary.asOfMillis).take(5)
 
         HomeData(
             todayTotal = budgetSummary.todayTotal,
@@ -201,6 +195,13 @@ fun HomeScreen(
             }
         }
 
+        if (budgetSummary.excludedTransactionCount > 0) {
+            Text("Excluded ${budgetSummary.excludedTransactionCount} invalid, unsupported currency, untracked, or future transactions.", color = WarningAmber)
+        }
+        if (budgetSummary.monthlyUnassignedTotal > 0) {
+            Text("Unassigned monthly spending: ₹${formatMoney(budgetSummary.monthlyUnassignedTotal)}", color = TextSecondary)
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
@@ -239,7 +240,7 @@ fun HomeScreen(
             BudgetWindowCard(
                 title = "Credited Today",
                 amount = budgetSummary.todayCreditTotal,
-                helper = "Net ₹${String.format("%,.0f", budgetSummary.todayNet)}",
+                helper = "Net ₹${formatMoney(budgetSummary.todayNet)}",
                 icon = Icons.Outlined.AccountBalanceWallet,
                 tint = SuccessGreen,
                 modifier = Modifier.weight(1f),
@@ -248,7 +249,7 @@ fun HomeScreen(
             BudgetWindowCard(
                 title = "Credited Weekly",
                 amount = budgetSummary.weekCreditTotal,
-                helper = "Net ₹${String.format("%,.0f", budgetSummary.weekNet)}",
+                helper = "Net ₹${formatMoney(budgetSummary.weekNet)}",
                 icon = Icons.Outlined.AccountBalanceWallet,
                 tint = SuccessGreen,
                 modifier = Modifier.weight(1f),
@@ -261,7 +262,7 @@ fun HomeScreen(
         BudgetWindowCard(
             title = "Credited This Month",
             amount = budgetSummary.monthlyCreditTotal,
-            helper = "Net ₹${String.format("%,.0f", budgetSummary.monthlyNet)} • ${budgetSummary.monthName}",
+            helper = "Net ₹${formatMoney(budgetSummary.monthlyNet)} • ${budgetSummary.monthName}",
             icon = Icons.Outlined.CalendarMonth,
             tint = SuccessGreen,
             modifier = Modifier.fillMaxWidth(),
@@ -359,7 +360,7 @@ fun HomeScreen(
                         Text("LOCAL SPENDING INSIGHT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = PrimaryColor, letterSpacing = 2.sp)
                     }
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("\"Budget is in pristine shape! Daily limits remain safe for weekend rides.\"", style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurface)
+                    Text(spendingInsight(budgetSummary), style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(modifier = Modifier.height(16.dp))
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { navController.navigate("weekly_dashboard") }) {
                         Text("Explore your Weekly Dashboard & Grid", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
@@ -379,6 +380,7 @@ fun HomeScreen(
         Spacer(modifier = Modifier.height(12.dp))
         
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (displayExpenses.isEmpty()) Text("No transactions recorded yet.", color = TextSecondary)
             displayExpenses.forEach { exp ->
                 HomeTransactionItem(exp)
             }
@@ -440,10 +442,11 @@ private fun BudgetWindowCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                "₹${String.format("%,.0f", amount)}",
+                "₹${formatMoney(amount)}",
+                modifier = Modifier.testTag("home-value-$title"),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Black,
-                color = tint
+                color = if (amount < 0) ErrorRed else tint
             )
             Text(helper, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
         }
@@ -455,7 +458,7 @@ private fun ProfileSpendMini(label: String, amount: Double, modifier: Modifier =
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = TextSecondary)
         Spacer(modifier = Modifier.height(4.dp))
-        Text("₹${String.format("%,.0f", amount)}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black, color = TextPrimary)
+        Text("₹${formatMoney(amount)}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black, color = TextPrimary)
     }
 }
 

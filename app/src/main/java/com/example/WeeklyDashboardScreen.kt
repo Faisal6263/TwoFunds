@@ -45,7 +45,7 @@ fun WeeklyDashboardScreen(
 ) {
     val scrollState = rememberScrollState()
     var showEditBudgetDialog by remember { mutableStateOf(false) }
-    var selectedDay by remember { mutableStateOf<DaySpentData?>(null) }
+    var selectedDayName by remember { mutableStateOf<String?>(null) }
 
     val totalWeekSpent = budgetSummary.weekTotal
     val weekBudgetUsed = (totalWeekSpent - budgetSummary.weekCreditTotal).coerceAtLeast(0.0)
@@ -76,7 +76,7 @@ fun WeeklyDashboardScreen(
             DaySpentData(
                 dayName = dayPair.second,
                 spent = budgetSummary.dailySpentByCalendarDay[dayPair.first] ?: 0.0,
-                credited = dayExpenses.filter { it.isCredit }.sumOf { it.amount },
+                credited = dayExpenses.filter { it.isCredit }.totalAmount(),
                 expenses = dayExpenses.sortedByDescending { it.dateInMillis }
             )
         }
@@ -179,11 +179,11 @@ fun WeeklyDashboardScreen(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column {
                         Text("CREDITED THIS WEEK", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-                        Text("+₹${String.format("%,.0f", budgetSummary.weekCreditTotal)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = SuccessGreen)
+                        Text("+₹${formatMoney(budgetSummary.weekCreditTotal)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = SuccessGreen)
                     }
                     Column(horizontalAlignment = Alignment.End) {
                         Text("NET CASH FLOW", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-                        Text("${if (budgetSummary.weekNet >= 0) "+" else "-"}₹${String.format("%,.0f", kotlin.math.abs(budgetSummary.weekNet))}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (budgetSummary.weekNet >= 0) SuccessGreen else ErrorRed)
+                        Text("${if (budgetSummary.weekNet >= 0) "+" else "-"}₹${formatMoney(kotlin.math.abs(budgetSummary.weekNet))}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (budgetSummary.weekNet >= 0) SuccessGreen else ErrorRed)
                     }
                 }
 
@@ -204,25 +204,25 @@ fun WeeklyDashboardScreen(
                 ) {
                     Column {
                         Text(
-                            text = "₹${String.format("%,.0f", weekBudgetUsed)}",
+                            text = "₹${formatMoney(weekBudgetUsed)}",
                             style = MaterialTheme.typography.displaySmall,
                             fontWeight = FontWeight.Black,
                             color = if (weekBudgetUsed > weeklyBudget) ErrorRed else SuccessGreen
                         )
                         Text(
-                            text = "net used of ₹${String.format("%,.0f", weeklyBudget)} • ₹${String.format("%,.0f", totalWeekSpent)} spent",
+                            text = "net used of ₹${formatMoney(weeklyBudget)} • ₹${formatMoney(totalWeekSpent)} spent",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
                     }
                     
                     val percentLeft = if (weeklyBudget > 0.0) {
-                        (budgetSummary.weekRemaining / weeklyBudget * 100).coerceAtLeast(0.0)
+                        (budgetSummary.weekRemaining / weeklyBudget * 100)
                     } else {
                         0.0
                     }
                     Text(
-                        text = "${percentLeft.toInt()}% remaining",
+                        text = if (weeklyBudget > 0.0) "${String.format(Locale.getDefault(), "%.1f", percentLeft)}% remaining" else "No weekly budget",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = if (percentLeft > 20) SuccessGreen else WarningAmber
@@ -231,6 +231,7 @@ fun WeeklyDashboardScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                Text("${utilizationLabel(weekBudgetUsed, weeklyBudget)} used", color = TextSecondary)
                 LinearProgressIndicator(
                     progress = progress,
                     modifier = Modifier
@@ -261,9 +262,9 @@ fun WeeklyDashboardScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = if (weekBudgetUsed <= weeklyBudget) {
-                                "After verified credits, you have ₹${String.format("%.0f", budgetSummary.weekRemaining)} available this week."
+                                "After recorded credits, you have ₹${formatMoney(budgetSummary.weekRemaining)} available this week."
                             } else {
-                                "Warning: Weekly target budget exceeded by ₹${String.format("%.0f", weekBudgetUsed - weeklyBudget)}."
+                                "Warning: Weekly target budget exceeded by ₹${formatMoney(weekBudgetUsed - weeklyBudget)}."
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = if (weekBudgetUsed <= weeklyBudget) Color(0xFF166534) else Color(0xFF991B1B),
@@ -316,7 +317,7 @@ fun WeeklyDashboardScreen(
                         ),
                         modifier = Modifier
                             .weight(1f)
-                            .clickable { selectedDay = dayData }
+                            .clickable { selectedDayName = dayData.dayName }
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Text(
@@ -341,7 +342,7 @@ fun WeeklyDashboardScreen(
                                         letterSpacing = 0.5.sp
                                     )
                                     Text(
-                                        text = "₹${String.format("%.0f", dayData.spent)}",
+                                        text = "₹${formatMoney(dayData.spent)}",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = if (isEmpty || isCreditOnly) TextPrimary
@@ -349,7 +350,7 @@ fun WeeklyDashboardScreen(
                                         else SuccessGreen
                                     )
                                     Text(
-                                        text = "+₹${String.format("%.0f", dayData.credited)} credited",
+                                        text = "+₹${formatMoney(dayData.credited)} credited",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = SuccessGreen,
                                         fontSize = 10.sp
@@ -370,7 +371,7 @@ fun WeeklyDashboardScreen(
                                         letterSpacing = 0.5.sp
                                     )
                                     Text(
-                                        text = "₹${String.format("%.0f", dailyAllocation)}",
+                                        text = "₹${formatMoney(dailyAllocation)}",
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.Bold,
                                         color = TextSecondary,
@@ -423,9 +424,9 @@ fun WeeklyDashboardScreen(
 
         Spacer(modifier = Modifier.height(80.dp))
 
-        selectedDay?.let { day ->
+        daySpentList.firstOrNull { it.dayName == selectedDayName }?.let { day ->
             AlertDialog(
-                onDismissRequest = { selectedDay = null },
+                onDismissRequest = { selectedDayName = null },
                 title = {
                     Column {
                         Text(
@@ -435,7 +436,7 @@ fun WeeklyDashboardScreen(
                             color = TextPrimary
                         )
                         Text(
-                            text = "${day.expenses.size} transactions • Rs.${String.format("%,.0f", day.spent)} spent • Rs.${String.format("%,.0f", day.credited)} credited",
+                            text = "${day.expenses.size} transactions • Rs.${formatMoney(day.spent)} spent • Rs.${formatMoney(day.credited)} credited",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
@@ -463,7 +464,7 @@ fun WeeklyDashboardScreen(
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { selectedDay = null }) {
+                    TextButton(onClick = { selectedDayName = null }) {
                         Text("Close", color = PrimaryColor)
                     }
                 },
@@ -474,7 +475,7 @@ fun WeeklyDashboardScreen(
 
         // Dialog for editing weekly budget
         if (showEditBudgetDialog) {
-            var inputValue by remember { mutableStateOf(weeklyBudget.toInt().toString()) }
+            var inputValue by remember { mutableStateOf(moneyInput(weeklyBudget)) }
             AlertDialog(
                 onDismissRequest = { showEditBudgetDialog = false },
                 title = {
@@ -495,7 +496,7 @@ fun WeeklyDashboardScreen(
                         )
                         OutlinedTextField(
                             value = inputValue,
-                            onValueChange = { inputValue = it.filter { char -> char.isDigit() } },
+                            onValueChange = { inputValue = it },
                             label = { Text("Weekly Budget (₹)") },
                             placeholder = { Text("e.g. 4000") },
                             singleLine = true,
@@ -513,8 +514,9 @@ fun WeeklyDashboardScreen(
                 },
                 confirmButton = {
                     Button(
+                        enabled = parseBudgetInput(inputValue) != null,
                         onClick = {
-                            val budget = inputValue.toDoubleOrNull() ?: 4000.0
+                            val budget = parseBudgetInput(inputValue) ?: return@Button
                             onWeeklyBudgetChange(budget)
                             showEditBudgetDialog = false
                         },

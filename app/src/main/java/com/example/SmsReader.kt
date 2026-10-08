@@ -15,7 +15,7 @@ data class SmsMessageData(
 
 suspend fun readSms(
     context: Context,
-    limit: Int = 1000,
+    limit: Int = Int.MAX_VALUE,
     daysAgo: Int = 7
 ): List<SmsMessageData> = withContext(Dispatchers.IO) {
 
@@ -32,7 +32,7 @@ suspend fun readSms(
                 Telephony.Sms.BODY,
                 Telephony.Sms.DATE
             ),
-            "${Telephony.Sms.DATE} > ?",
+            "${Telephony.Sms.DATE} >= ?",
             arrayOf(cutoffTime.toString()),
             "${Telephony.Sms.DATE} DESC"
         )

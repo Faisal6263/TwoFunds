@@ -18,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -35,9 +36,9 @@ import java.util.*
 @Composable
 fun MonthlyTransactionsScreen(budgetSummary: BudgetSummary, navController: NavController, onDeleteExpense: (Int) -> Unit) {
     var searchQuery by remember { mutableStateOf("") }
-    var selectedDay by remember { mutableStateOf<MonthlyDayData?>(null) }
+    var selectedDayLabel by remember(budgetSummary.monthName) { mutableStateOf<String?>(null) }
     val monthlyExpenses = budgetSummary.monthlyExpenses
-    
+
     val filteredExpenses = remember(monthlyExpenses, searchQuery) {
         if (searchQuery.isBlank()) {
             monthlyExpenses
@@ -49,16 +50,19 @@ fun MonthlyTransactionsScreen(budgetSummary: BudgetSummary, navController: NavCo
             }
         }
     }
-    
-    val totalSpent = budgetSummary.monthlyTotal
-    val totalCredited = budgetSummary.monthlyCreditTotal
-    val husbandTotal = budgetSummary.monthlyProfileTotals[SpenderProfile.HUSBAND] ?: 0.0
-    val wifeTotal = budgetSummary.monthlyProfileTotals[SpenderProfile.WIFE] ?: 0.0
-    val sharedTotal = budgetSummary.monthlyProfileTotals[SpenderProfile.SHARED] ?: 0.0
+
+    val totalSpent = filteredExpenses.filter { it.isDebit }.totalAmount()
+    val totalCredited = filteredExpenses.filter { it.isCredit }.totalAmount()
+    val netCashFlow = roundMoney(totalCredited - totalSpent)
+    val unassignedTotal = filteredExpenses.filter { it.isDebit && SpenderProfile.entries.none(it::matchesProfile) }.totalAmount()
+    val husbandTotal = filteredExpenses.filter { it.isDebit && it.matchesProfile(SpenderProfile.HUSBAND) }.totalAmount()
+    val wifeTotal = filteredExpenses.filter { it.isDebit && it.matchesProfile(SpenderProfile.WIFE) }.totalAmount()
+    val sharedTotal = filteredExpenses.filter { it.isDebit && it.matchesProfile(SpenderProfile.SHARED) }.totalAmount()
     val currentMonthName = budgetSummary.monthName
 
-    val monthlyDayCards = remember(monthlyExpenses, currentMonthName) {
+    val monthlyDayCards = remember(filteredExpenses, currentMonthName, budgetSummary.asOfMillis) {
         val currentMonth = Calendar.getInstance().apply {
+            timeInMillis = budgetSummary.asOfMillis
             set(Calendar.DAY_OF_MONTH, 1)
         }
         val daysInMonth = currentMonth.getActualMaximum(Calendar.DAY_OF_MONTH)
@@ -68,7 +72,7 @@ fun MonthlyTransactionsScreen(budgetSummary: BudgetSummary, navController: NavCo
             val dayCalendar = (currentMonth.clone() as Calendar).apply {
                 set(Calendar.DAY_OF_MONTH, dayOfMonth)
             }
-            val dayTransactions = monthlyExpenses.filter { expense ->
+            val dayTransactions = filteredExpenses.filter { expense ->
                 val expenseCalendar = Calendar.getInstance().apply {
                     timeInMillis = expense.dateInMillis
                 }
@@ -79,16 +83,16 @@ fun MonthlyTransactionsScreen(budgetSummary: BudgetSummary, navController: NavCo
 
             MonthlyDayData(
                 dayLabel = dayLabelFormatter.format(dayCalendar.time),
-                spent = dayTransactions.filter { it.isDebit }.sumOf { it.amount },
-                credited = dayTransactions.filter { it.isCredit }.sumOf { it.amount },
+                spent = dayTransactions.filter { it.isDebit }.totalAmount(),
+                credited = dayTransactions.filter { it.isCredit }.totalAmount(),
                 transactions = dayTransactions
             )
         }
     }
 
-    selectedDay?.let { day ->
+    monthlyDayCards.firstOrNull { it.dayLabel == selectedDayLabel }?.let { day ->
         AlertDialog(
-            onDismissRequest = { selectedDay = null },
+            onDismissRequest = { selectedDayLabel = null },
             title = {
                 Column {
                     Text(
@@ -98,7 +102,7 @@ fun MonthlyTransactionsScreen(budgetSummary: BudgetSummary, navController: NavCo
                         color = TextPrimary
                     )
                     Text(
-                        text = "${day.transactions.size} transactions • Rs.${String.format("%,.0f", day.spent)} spent • Rs.${String.format("%,.0f", day.credited)} credited",
+                        text = "${day.transactions.size} transactions • Rs.${formatMoney(day.spent)} spent • Rs.${formatMoney(day.credited)} credited",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary
                     )
@@ -126,7 +130,7 @@ fun MonthlyTransactionsScreen(budgetSummary: BudgetSummary, navController: NavCo
                 }
             },
             confirmButton = {
-                TextButton(onClick = { selectedDay = null }) {
+                TextButton(onClick = { selectedDayLabel = null }) {
                     Text("Close", color = PrimaryColor)
                 }
             },
@@ -172,11 +176,38 @@ fun MonthlyTransactionsScreen(budgetSummary: BudgetSummary, navController: NavCo
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .testTag("monthly-ledger")
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp)
         ) {
+            // Search Input
+            item {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier.fillMaxWidth().testTag("monthly-search"),
+                    placeholder = { Text("Search by merchant or category...") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextSecondary) },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear", tint = TextSecondary)
+                            }
+                        }
+                    },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = PrimaryColor,
+                        unfocusedBorderColor = CardBorder,
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    singleLine = true
+                )
+            }
+
             // Summary Card
             item {
                 Card(
@@ -188,7 +219,7 @@ fun MonthlyTransactionsScreen(budgetSummary: BudgetSummary, navController: NavCo
                         modifier = Modifier.padding(24.dp)
                     ) {
                         Text(
-                            text = "TOTAL SPENT THIS MONTH",
+                            text = if (searchQuery.isBlank()) "TOTAL SPENT THIS MONTH" else "MATCHING MONTHLY SPEND",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = Color.White.copy(alpha = 0.7f),
@@ -196,7 +227,8 @@ fun MonthlyTransactionsScreen(budgetSummary: BudgetSummary, navController: NavCo
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "₹${String.format("%,.0f", totalSpent)}",
+                            text = "₹${formatMoney(totalSpent)}",
+                            modifier = Modifier.testTag("monthly-spent"),
                             style = MaterialTheme.typography.displaySmall,
                             fontWeight = FontWeight.Black,
                             color = Color.White
@@ -205,16 +237,16 @@ fun MonthlyTransactionsScreen(budgetSummary: BudgetSummary, navController: NavCo
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Column {
                                 Text("CREDITED", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.7f))
-                                Text("+₹${String.format("%,.0f", totalCredited)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFFBBF7D0))
+                                Text("+₹${formatMoney(totalCredited)}", modifier = Modifier.testTag("monthly-credit"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFFBBF7D0))
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Text("NET CASH FLOW", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.7f))
-                                Text("${if (budgetSummary.monthlyNet >= 0) "+" else "-"}₹${String.format("%,.0f", kotlin.math.abs(budgetSummary.monthlyNet))}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("${if (netCashFlow >= 0) "+" else "-"}₹${formatMoney(kotlin.math.abs(netCashFlow))}", modifier = Modifier.testTag("monthly-net"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
                             }
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Based on ${monthlyExpenses.size} parsed financial receipts & live updates",
+                            text = "Based on ${filteredExpenses.size} matching recorded transactions",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.8f)
                         )
@@ -234,6 +266,7 @@ fun MonthlyTransactionsScreen(budgetSummary: BudgetSummary, navController: NavCo
                         MonthlyProfileTotal("👩 Wife", wifeTotal, Modifier.weight(1f))
                         MonthlyProfileTotal("🤝 Shared", sharedTotal, Modifier.weight(1f))
                     }
+                    if (unassignedTotal > 0) Text("Unassigned: ₹${formatMoney(unassignedTotal)}", modifier = Modifier.padding(16.dp), color = TextSecondary)
                 }
             }
 
@@ -265,7 +298,7 @@ fun MonthlyTransactionsScreen(budgetSummary: BudgetSummary, navController: NavCo
                                 MonthlyDayCard(
                                     day = day,
                                     modifier = Modifier.weight(1f),
-                                    onClick = { selectedDay = day }
+                                    onClick = { selectedDayLabel = day.dayLabel }
                                 )
                             }
                             if (rowDays.size == 1) {
@@ -275,39 +308,13 @@ fun MonthlyTransactionsScreen(budgetSummary: BudgetSummary, navController: NavCo
                     }
                 }
             }
-            
-            // Search Input
-            item {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Search by merchant or category...") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextSecondary) },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Clear, contentDescription = "Clear", tint = TextSecondary)
-                            }
-                        }
-                    },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PrimaryColor,
-                        unfocusedBorderColor = CardBorder,
-                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                    ),
-                    singleLine = true
-                )
-            }
-            
+
             // Category Breakdown Panel
-            if (monthlyExpenses.any { it.isDebit } && searchQuery.isEmpty()) {
-                val byCategory = monthlyExpenses.filter { it.isDebit }.groupBy { it.category }
-                    .mapValues { it.value.sumOf { exp -> exp.amount } }
+            if (filteredExpenses.any { it.isDebit }) {
+                val byCategory = filteredExpenses.filter { it.isDebit }.groupBy { normalizeBudgetCategory(it.category) }
+                    .mapValues { it.value.totalAmount() }
                     .entries.sortedByDescending { it.value }
-                
+
                 item {
                     Card(
                         shape = RoundedCornerShape(16.dp),
@@ -324,21 +331,21 @@ fun MonthlyTransactionsScreen(budgetSummary: BudgetSummary, navController: NavCo
                                 letterSpacing = 1.sp
                             )
                             Spacer(modifier = Modifier.height(12.dp))
-                            byCategory.take(3).forEach { (category, amount) ->
-                                val progress = (amount / totalSpent.coerceAtLeast(1.0)).toFloat().coerceIn(0f, 1f)
+                            byCategory.forEach { (category, amount) ->
+                                val progress = categoryShare(amount, totalSpent)
                                 Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
                                         Text(category, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                                        Text("₹${String.format("%.0f", amount)} (${(progress * 100).toInt()}%)", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = PrimaryColor)
+                                        Text("₹${formatMoney(amount)} (${utilizationLabel(amount, totalSpent)})", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = PrimaryColor)
                                     }
                                     Spacer(modifier = Modifier.height(4.dp))
                                     LinearProgressIndicator(
                                         progress = progress,
                                         modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
-                                        color = if(progress > 0.5) ErrorRed else PrimaryColor,
+                                        color = PrimaryColor,
                                         trackColor = CardBorder
                                     )
                                 }
@@ -358,7 +365,7 @@ fun MonthlyTransactionsScreen(budgetSummary: BudgetSummary, navController: NavCo
                     modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
                 )
             }
-            
+
             if (filteredExpenses.isEmpty()) {
                 item {
                     Box(
@@ -432,13 +439,13 @@ private fun MonthlyDayCard(
                 letterSpacing = 0.5.sp
             )
             Text(
-                text = "₹${String.format("%.0f", day.spent)}",
+                text = "₹${formatMoney(day.spent)}",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.ExtraBold,
                 color = if (isEmpty || isCreditOnly) TextPrimary else SuccessGreen
             )
             Text(
-                text = "+₹${String.format("%.0f", day.credited)} credited",
+                text = "+₹${formatMoney(day.credited)} credited",
                 style = MaterialTheme.typography.labelSmall,
                 color = SuccessGreen,
                 fontSize = 10.sp
@@ -483,7 +490,7 @@ private fun MonthlyProfileTotal(label: String, amount: Double, modifier: Modifie
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = TextSecondary)
         Spacer(modifier = Modifier.height(4.dp))
-        Text("₹${String.format("%,.0f", amount)}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black, color = TextPrimary)
+        Text("₹${formatMoney(amount)}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black, color = TextPrimary)
     }
 }
 

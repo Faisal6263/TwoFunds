@@ -82,12 +82,12 @@ fun RidePlannerScreen(rideBudget: Double) {
     var mealBudget by remember { mutableFloatStateOf(selectedIdea.mealBudget) }
     var buffer by remember { mutableFloatStateOf(selectedIdea.buffer) }
 
-    val weekendFund = rideBudget.toFloat().coerceAtLeast(1f)
-    val roundTripKm = oneWayDistance * 2
-    val fuelCost = (roundTripKm / mileage.coerceAtLeast(1f)) * fuelPrice
-    val totalCost = fuelCost + mealBudget + buffer
-    val remaining = weekendFund - totalCost
-    val progress = (totalCost / weekendFund).coerceIn(0f, 1f)
+    val weekendFund = safeBudget(rideBudget)
+    val estimate = buildRideEstimate(oneWayDistance.toDouble(), mileage.toDouble(), fuelPrice.toDouble(), mealBudget.toDouble(), buffer.toDouble(), weekendFund)
+    val fuelCost = estimate.fuelCost
+    val totalCost = estimate.totalCost
+    val remaining = estimate.remaining
+    val progress = budgetProgress(totalCost, weekendFund)
     val isSafe = totalCost <= weekendFund
 
     Column(
@@ -120,8 +120,8 @@ fun RidePlannerScreen(rideBudget: Double) {
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Weekend fund", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
-                        Text("Rs.${String.format("%,.0f", weekendFund)} available", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text("Weekend fund estimate", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
+                        Text("Rs.${formatMoney(weekendFund)} available", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = TextPrimary)
                     }
                     Icon(
                         imageVector = if (isSafe) Icons.Filled.CheckCircle else Icons.Outlined.WarningAmber,
@@ -142,14 +142,15 @@ fun RidePlannerScreen(rideBudget: Double) {
 
                 Text(
                     text = if (isSafe) {
-                        "Plan is within budget with Rs.${String.format("%,.0f", remaining)} left."
+                        "Plan is within budget with Rs.${formatMoney(remaining)} left."
                     } else {
-                        "Plan exceeds budget by Rs.${String.format("%,.0f", -remaining)}."
+                        "Plan exceeds budget by Rs.${formatMoney(-remaining)}."
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = if (isSafe) SuccessGreen else ErrorRed
                 )
+                Text("Estimate capped by remaining weekly and monthly budgets; based on recorded transactions and current pacing settings.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
             }
         }
 
@@ -215,7 +216,7 @@ private fun RecommendationCard(
                 Text(idea.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = TextPrimary)
             }
             Text("${idea.distanceKm.toInt()} km one-way", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-            Text("Est. Rs.${String.format("%,.0f", idea.mealBudget + idea.buffer)} before fuel", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = PrimaryColor)
+            Text("Est. Rs.${formatMoney(idea.mealBudget + idea.buffer)} before fuel", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = PrimaryColor)
         }
     }
 }
@@ -227,8 +228,8 @@ private fun CostCalculatorCard(
     fuelPrice: Float,
     mealBudget: Float,
     buffer: Float,
-    fuelCost: Float,
-    totalCost: Float,
+    fuelCost: Double,
+    totalCost: Double,
     onDistanceChange: (Float) -> Unit,
     onMileageChange: (Float) -> Unit,
     onFuelPriceChange: (Float) -> Unit,
@@ -249,7 +250,7 @@ private fun CostCalculatorCard(
             }
 
             DistanceInput(oneWayDistance, onDistanceChange)
-            PlannerSlider("One-way distance", "${oneWayDistance.toInt()} km", oneWayDistance, 1f..250f, onDistanceChange)
+            PlannerSlider("One-way distance", "${oneWayDistance.toInt()} km", oneWayDistance, 0f..250f, onDistanceChange)
             PlannerSlider("Vehicle mileage", "${mileage.toInt()} km/l", mileage, 15f..70f, onMileageChange)
             PlannerSlider("Fuel price", "Rs.${fuelPrice.toInt()}/l", fuelPrice, 80f..130f, onFuelPriceChange)
             PlannerSlider("Food and stops", "Rs.${mealBudget.toInt()}", mealBudget, 0f..3000f, onMealBudgetChange)
@@ -262,7 +263,7 @@ private fun CostCalculatorCard(
             ) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     CostRow("Fuel estimate", fuelCost)
-                    CostRow("Food and buffer", mealBudget + buffer)
+                    CostRow("Food and buffer", roundMoney(mealBudget.toDouble() + buffer.toDouble()))
                     CostRow("Total ride cost", totalCost, emphasized = true)
                 }
             }
@@ -285,7 +286,7 @@ private fun PlannerSlider(
         }
         Slider(
             value = value,
-            onValueChange = onValueChange,
+            onValueChange = { onValueChange(kotlin.math.round(it)) },
             valueRange = range,
             colors = SliderDefaults.colors(
                 thumbColor = PrimaryColor,
@@ -307,7 +308,7 @@ private fun DistanceInput(
         onValueChange = { value ->
             val cleaned = value.filter(Char::isDigit).take(3)
             distanceInput = cleaned
-            cleaned.toFloatOrNull()?.let { onDistanceChange(it.coerceIn(1f, 250f)) }
+            cleaned.toFloatOrNull()?.let { onDistanceChange(it.coerceIn(0f, 250f)) }
         },
         label = { Text("Exact one-way distance") },
         suffix = { Text("km") },
@@ -323,11 +324,11 @@ private fun DistanceInput(
 }
 
 @Composable
-private fun CostRow(label: String, amount: Float, emphasized: Boolean = false) {
+private fun CostRow(label: String, amount: Double, emphasized: Boolean = false) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
         Text(
-            "Rs.${String.format("%,.0f", amount)}",
+            "Rs.${formatMoney(amount)}",
             style = if (emphasized) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium,
             fontWeight = if (emphasized) FontWeight.Black else FontWeight.Bold,
             color = if (emphasized) TextPrimary else PrimaryColor

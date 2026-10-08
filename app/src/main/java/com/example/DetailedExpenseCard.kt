@@ -67,7 +67,7 @@ fun DetailedExpenseCard(expense: Expense, onDelete: (() -> Unit)? = null) {
                     letterSpacing = 1.sp
                 )
             }
-            Text("$amountPrefix₹${String.format("%.0f", expense.amount)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = amountColor)
+            Text("$amountPrefix₹${formatMoney(expense.amount)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = amountColor)
             if (onDelete != null) {
                 Spacer(modifier = Modifier.width(12.dp))
                 Icon(
@@ -96,7 +96,7 @@ fun DetailedExpenseCard(expense: Expense, onDelete: (() -> Unit)? = null) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val bankName = parseCardBankName("", expense.originalSms)
+                    val bankName = if (expense.isSmsTransaction()) parseCardBankName(expense.sourceSender, expense.originalSms) else "Manual entry"
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("🏦", fontSize = 16.sp)
                         Spacer(modifier = Modifier.width(6.dp))
@@ -135,7 +135,7 @@ fun DetailedExpenseCard(expense: Expense, onDelete: (() -> Unit)? = null) {
                     ) {
                         Text(if (expense.isCredit) "Credited Amount" else "Debited Amount", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                         Text(
-                            "₹${String.format("%,.2f", expense.amount)}",
+                            "₹${formatMoney(expense.amount)}",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Black,
                             color = amountColor
@@ -186,13 +186,13 @@ fun DetailedExpenseCard(expense: Expense, onDelete: (() -> Unit)? = null) {
                 ) {
                     val fallbackDateFormatter = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
                     val fallbackDateText = fallbackDateFormatter.format(Date(expense.dateInMillis))
-                    val rawSmsText = expense.originalSms.ifEmpty {
-                        if (expense.isCredit) "Received Rs.${String.format("%.2f", expense.amount)} from ${expense.merchant} on ${fallbackDateText}."
-                        else "SBI Card: Spent Rs.${String.format("%.2f", expense.amount)} at ${expense.merchant} on ${fallbackDateText}."
+                    val rawSmsText = if (expense.isSmsTransaction()) expense.originalSms else {
+                        if (expense.isCredit) "Received Rs.${formatMoney(expense.amount)} from ${expense.merchant} on ${fallbackDateText}."
+                        else "Manually recorded Rs.${formatMoney(expense.amount)} spent at ${expense.merchant} on ${fallbackDateText}."
                     }
                     Column {
                         Text(
-                            "ORIGINAL MESSAGE RECEIPT:", 
+                            if (expense.isSmsTransaction()) "ORIGINAL MESSAGE RECEIPT:" else "MANUAL TRANSACTION:",
                             style = MaterialTheme.typography.labelSmall, 
                             fontWeight = FontWeight.Bold, 
                             color = TextSecondary,
